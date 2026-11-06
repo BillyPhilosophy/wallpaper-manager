@@ -1,0 +1,51 @@
+services:
+  web:
+    image: ${DOCKERHUB_USERNAME:-local}/wallpaper-manager-web:${IMAGE_TAG:-latest}
+    build: { context: .., dockerfile: deploy/web.Dockerfile }
+    depends_on: { api: { condition: service_healthy } }
+    ports: ["8083:80"]
+    restart: unless-stopped
+  api:
+    image: ${DOCKERHUB_USERNAME:-local}/wallpaper-manager-api:${IMAGE_TAG:-latest}
+    build: { context: .., dockerfile: deploy/api.Dockerfile }
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: file:/app-data/wallpaper-manager.db
+      REDIS_URL: redis://redis:6379
+      STEAM_ROOT: /wallpaper-manager/steam-data
+      STEAM_WEB_API_KEY: ${STEAM_WEB_API_KEY:-}
+      MAX_QUEUE_LENGTH: ${MAX_QUEUE_LENGTH:-20}
+    volumes:
+      - /srv/wallpaper-manager/app-data:/app-data
+      - /srv/wallpaper-manager/steam-data:/wallpaper-manager/steam-data:ro
+    depends_on: { redis: { condition: service_healthy } }
+    healthcheck: { test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"], interval: 30s, timeout: 5s, retries: 5, start_period: 30s }
+    restart: unless-stopped
+  worker:
+    image: ${DOCKERHUB_USERNAME:-local}/wallpaper-manager-worker:${IMAGE_TAG:-latest}
+    build: { context: .., dockerfile: deploy/worker.Dockerfile }
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: file:/app-data/wallpaper-manager.db
+      REDIS_URL: redis://redis:6379
+      MANAGER_ROOT: /wallpaper-manager
+      STAGING_DIR: /wallpaper-manager/staging
+      STEAM_ROOT: /wallpaper-manager/steam-data
+      TRASH_DIR: /wallpaper-manager/trash
+      STEAM_CONFIG_DIR: /steam-config
+      STEAMCMD_BIN: /opt/steamcmd/steamcmd.sh
+    volumes:
+      - /srv/wallpaper-manager/app-data:/app-data
+      - /srv/wallpaper-manager:/wallpaper-manager
+      - /srv/wallpaper-manager/steam-config:/steam-config
+    depends_on: { redis: { condition: service_healthy }, api: { condition: service_healthy } }
+    healthcheck: { test: ["CMD", "node", "-e", "fetch('http://localhost:9780/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"], interval: 30s, timeout: 5s, retries: 5, start_period: 30s }
+    restart: unless-stopped
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: ["redis-data:/data"]
+    healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 10s, timeout: 3s, retries: 5 }
+    restart: unless-stopped
+volumes:
+  redis-data:

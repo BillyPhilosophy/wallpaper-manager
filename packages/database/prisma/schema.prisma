@@ -1,0 +1,52 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Wallpaper {
+  workshopId        String        @id
+  title             String
+  description       String?
+  type              String        @default("unknown")
+  officialPreviewUrl String?
+  metadataJson      String        @default("{}")
+  localRelativePath String?
+  status            String        @default("not_downloaded")
+  fileSizeBytes     BigInt?
+  lastErrorCode     String?
+  lastErrorMessage  String?
+  downloadedAt      DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  jobs              DownloadJob[]
+
+  @@index([status, type])
+}
+
+model DownloadJob {
+  id           String    @id
+  workshopId   String
+  activeWorkshopId String? @unique
+  wallpaper    Wallpaper @relation(fields: [workshopId], references: [workshopId], onDelete: Cascade)
+  status       String    @default("queued")
+  attempt      Int       @default(1)
+  errorCode    String?
+  errorMessage String?
+  createdAt    DateTime  @default(now())
+  startedAt    DateTime?
+  finishedAt   DateTime?
+
+  @@index([workshopId, status])
+  @@index([status, createdAt])
+}
+
+model SteamAuthState {
+  id        Int      @id @default(1)
+  status    String   @default("auth_required")
+  message   String?
+  updatedAt DateTime @updatedAt
+}
