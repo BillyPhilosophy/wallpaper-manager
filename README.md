@@ -51,9 +51,12 @@ Steam Web API Key 和 SteamCMD 登录是两套独立配置。密码及 Guard 码
 <用户名>/wallpaper-manager-web:latest
 <用户名>/wallpaper-manager-api:latest
 <用户名>/wallpaper-manager-worker:latest
+<用户名>/wallpaper-manager-worker:latest-rpi5
 ```
 
-同时生成 `sha-<完整提交哈希>` 标签用于回滚。设备端 `deploy/.env` 中的 `DOCKERHUB_USERNAME` 必须与这里一致，否则 Compose 会拉取其他命名空间下的镜像。`STEAM_WEB_API_KEY` 只在设备端配置，不需要也不应添加到 GitHub Actions Secrets。
+`latest-rpi5` 使用适配 Pi 5 16KB 页内核的 Box64。树莓派 5 遇到 SteamCMD `SIGSEGV` 时，在设备端 `.env` 设置 `WORKER_IMAGE_SUFFIX=-rpi5`；其他 ARM64 设备通常保持为空。
+
+同时生成 `sha-<完整提交哈希>` 标签用于回滚，Pi 5 变体对应 `sha-<完整提交哈希>-rpi5`。设备端 `deploy/.env` 中的 `DOCKERHUB_USERNAME` 必须与这里一致，否则 Compose 会拉取其他命名空间下的镜像。`STEAM_WEB_API_KEY` 只在设备端配置，不需要也不应添加到 GitHub Actions Secrets。
 
 另一个 `.github/workflows/ci.yml` 会在 push 和 Pull Request 时自动执行类型检查、单元测试、构建和 E2E 测试，不需要 Docker Hub Secrets；它与镜像发布工作流相互独立。
 

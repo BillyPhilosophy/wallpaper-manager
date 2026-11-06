@@ -15,6 +15,8 @@ cp deploy/.env.example deploy/.env
 ```env
 DOCKERHUB_USERNAME=local
 IMAGE_TAG=latest
+WORKER_IMAGE_SUFFIX=
+BOX64_PACKAGE=box64
 WALLPAPER_DATA_ROOT=/srv/wallpaper-manager
 STEAM_WEB_API_KEY=
 MAX_QUEUE_LENGTH=20
@@ -24,6 +26,8 @@ NO_PROXY=localhost,127.0.0.1,web,api,worker,redis
 ```
 
 `WALLPAPER_DATA_ROOT` 是所有应用数据的宿主机根目录，可改为 `/mnt/wallpaper-disk/wallpaper-manager` 等外接硬盘路径。未设置时使用 `/srv/wallpaper-manager`。容器内部路径保持固定，不需要修改。
+
+发布工作流同时提供通用 Worker 和 Pi 5 16KB 页专用 Worker。Pi 5 使用 16KB 页内核且 SteamCMD 出现 `SIGSEGV` 时，设置 `WORKER_IMAGE_SUFFIX=-rpi5`，镜像标签会变成 `latest-rpi5` 或对应的提交标签。其他设备通常保持为空。本地源码构建 Pi 5 变体时，同时设置 `BOX64_PACKAGE=box64-rpi5arm64ps16k`。
 
 Compose 的一次性 `init` 服务会自动创建 `app-data`、`staging`、`steam-data`、`steam-config` 和 `trash`，将应用目录所有权设为 UID/GID `1000:1000`，并将 `steam-config` 权限设为 `0700`。初始化成功后退出，API 和 Worker 仅在初始化成功后启动，重复启动不会清除已有数据。
 

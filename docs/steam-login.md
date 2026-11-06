@@ -18,6 +18,6 @@ Steam Web API Key 与 SteamCMD 会话是两套独立配置：Key 仅由 API 从�
 docker compose -f deploy/docker-compose.yml logs --tail=200 api worker
 ```
 
-API 异常日志包含 `requestId`、HTTP 方法、路由、状态码和错误码；前端错误响应也包含相同的 `requestId`，可据此关联。Worker 的 `[auth]` 日志记录登录／Guard 请求结果，`[steam]` 日志记录 SteamCMD 启动、提示符就绪、认证状态和进程退出。订阅同步使用 `[subscriptions]` 前缀。
+API 异常日志包含 `requestId`、HTTP 方法、路由、状态码和错误码；前端错误响应也包含相同的 `requestId`，可据此关联。Worker 的 `[auth]` 日志记录登录／Guard 请求结果，`[steam]` 日志记录 SteamCMD 启动、提示符就绪、认证状态和进程退出。订阅同步使用 `[subscriptions]` 前缀。`[steam-api]` 会记录网络超时、上游 HTTP 状态码或无效 JSON，但不会记录包含 API Key 的 URL。
 
 日志不会主动记录请求正文、查询字符串、完整 Steam URL、SteamCMD 原始输出、密码、Guard 码或 API Key。`STEAM_RATE_LIMITED` 表示请求限流，应暂停操作后重试；它不等于账号被封。

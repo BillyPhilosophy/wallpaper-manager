@@ -45,8 +45,12 @@ services:
     healthcheck: { test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"], interval: 30s, timeout: 5s, retries: 5, start_period: 30s }
     restart: unless-stopped
   worker:
-    image: ${DOCKERHUB_USERNAME:-local}/wallpaper-manager-worker:${IMAGE_TAG:-latest}
-    build: { context: .., dockerfile: deploy/worker.Dockerfile }
+    image: ${DOCKERHUB_USERNAME:-local}/wallpaper-manager-worker:${IMAGE_TAG:-latest}${WORKER_IMAGE_SUFFIX:-}
+    build:
+      context: ..
+      dockerfile: deploy/worker.Dockerfile
+      args:
+        BOX64_PACKAGE: "${BOX64_PACKAGE:-box64}"
     environment:
       NODE_ENV: production
       DATABASE_URL: file:/app-data/wallpaper-manager.db

@@ -28,10 +28,10 @@ async function steamFetch(url: string, init: RequestInit = {}): Promise<any> {
   recentRequests.push(Date.now());
   let response: Response;
   try { response = await fetch(url, { ...init, signal: AbortSignal.timeout(15000), headers: { 'User-Agent': 'WallpaperManager/1.0', ...init.headers } }); }
-  catch { throw new ServiceUnavailableException({ code: 'STEAM_API_UNAVAILABLE', message: '无法连接 Steam 官方接口' }); }
-  if (response.status === 429) throw new HttpException({ code: 'STEAM_RATE_LIMITED', message: 'Steam 请求限流，请稍后重试' }, 429);
-  if (!response.ok) throw new ServiceUnavailableException({ code: 'STEAM_API_UNAVAILABLE', message: 'Steam 官方接口暂不可用' });
-  try { return await response.json(); } catch { throw new ServiceUnavailableException({ code: 'STEAM_API_UNAVAILABLE', message: 'Steam 官方接口返回了无效响应' }); }
+  catch { console.warn('[steam-api] network request failed or timed out'); throw new ServiceUnavailableException({ code: 'STEAM_API_UNAVAILABLE', message: '无法连接 Steam 官方接口' }); }
+  if (response.status === 429) { console.warn('[steam-api] upstream status=429'); throw new HttpException({ code: 'STEAM_RATE_LIMITED', message: 'Steam 请求限流，请稍后重试' }, 429); }
+  if (!response.ok) { console.warn(`[steam-api] upstream status=${response.status}`); throw new ServiceUnavailableException({ code: 'STEAM_API_UNAVAILABLE', message: 'Steam 官方接口暂不可用' }); }
+  try { return await response.json(); } catch { console.warn('[steam-api] upstream returned invalid JSON'); throw new ServiceUnavailableException({ code: 'STEAM_API_UNAVAILABLE', message: 'Steam 官方接口返回了无效响应' }); }
 }
 @Controller('workshop')
 export class WorkshopController {
