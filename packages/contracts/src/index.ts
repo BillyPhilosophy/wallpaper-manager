@@ -7,7 +7,8 @@ export type WallpaperType = typeof WALLPAPER_TYPES[number];
 export type ContentRating = typeof CONTENT_RATINGS[number];
 export type WallpaperStatus = typeof WALLPAPER_STATUSES[number];
 export type DownloadStatus = typeof DOWNLOAD_STATUSES[number];
-export type SteamAuthStatus = 'authenticated' | 'auth_required' | 'guard_required' | 'error';
+export type SteamAuthStatus = 'authenticated' | 'auth_required' | 'guard_required' | 'qr_required' | 'error';
+export interface SteamQrLoginState { status: SteamAuthStatus; qrCode: string | null; updatedAt: string | null }
 export type ErrorCode = 'STEAM_AUTH_REQUIRED' | 'STEAM_GUARD_REQUIRED' | 'STEAM_RATE_LIMITED' | 'STEAM_DOWNLOAD_FAILED' | 'DOWNLOAD_TIMEOUT' | 'DISK_FULL' | 'WORKSHOP_ITEM_NOT_FOUND' | 'UNSUPPORTED_TYPE' | 'INVALID_PROJECT' | 'RESOURCE_MISSING' | 'PATH_UNSAFE' | 'PUBLISH_CONFLICT' | 'CANCELLED' | 'INTERNAL_ERROR' | 'NOT_FOUND' | 'CONFLICT' | 'BAD_REQUEST' | 'STEAM_API_UNAVAILABLE';
 
 export interface ApiError { code: ErrorCode | string; message: string; requestId: string }
@@ -37,6 +38,6 @@ export interface PreviewDescriptor {
   fallbackPreviewUrl: string | null; degraded: boolean; message: string | null;
 }
 export interface Capabilities { workerReady: boolean; steamAuthenticated: boolean; livePreviewTypes: ['scene', 'web']; webwallglVersion: '3.0.0' }
-export interface SteamAuthState { status: SteamAuthStatus; message: string | null; updatedAt: string }
-export type AuthControl = { type: 'login'; username: string; secret: string } | { type: 'guard'; secret: string } | { type: 'logout' };
+export interface SteamAuthState { status: SteamAuthStatus; message: string | null; accountName: string | null; steamId: string | null; updatedAt: string }
+export type AuthControl = { type: 'login'; username: string; secret: string; steamId?: string } | { type: 'qr'; steamId?: string } | { type: 'guard'; secret: string } | { type: 'logout' };
 export interface QueueLength { length: number }

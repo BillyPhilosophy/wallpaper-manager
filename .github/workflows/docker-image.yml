@@ -14,11 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { service: web, suffix: '' }
-          - { service: api, suffix: '' }
-          - { service: worker, suffix: '', box64_package: box64 }
-          - { service: worker, suffix: '-rpi5', box64_package: box64-rpi5arm64ps16k }
+        service: [web, api, worker]
     steps:
       - uses: actions/checkout@v4
       - name: Set up QEMU
@@ -30,16 +26,15 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Build and push ${{ matrix.service }}${{ matrix.suffix }} (linux/arm64)
+      - name: Build and push ${{ matrix.service }} (linux/arm64)
         uses: docker/build-push-action@v6
         with:
           context: .
           file: deploy/${{ matrix.service }}.Dockerfile
           platforms: linux/arm64
           push: true
-          build-args: ${{ matrix.service == 'worker' && format('BOX64_PACKAGE={0}', matrix.box64_package) || '' }}
           tags: |
-            ${{ env.IMAGE_NAMESPACE }}/wallpaper-manager-${{ matrix.service }}:latest${{ matrix.suffix }}
-            ${{ env.IMAGE_NAMESPACE }}/wallpaper-manager-${{ matrix.service }}:sha-${{ github.sha }}${{ matrix.suffix }}
-          cache-from: type=gha,scope=${{ matrix.service }}${{ matrix.suffix }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.service }}${{ matrix.suffix }}
+            ${{ env.IMAGE_NAMESPACE }}/wallpaper-manager-${{ matrix.service }}:latest
+            ${{ env.IMAGE_NAMESPACE }}/wallpaper-manager-${{ matrix.service }}:sha-${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}

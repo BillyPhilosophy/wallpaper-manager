@@ -1,0 +1,350 @@
+import { spawn, type ChildProcess } from 'node:child_process';
+import { chmod, mkdir, readdir, rm } from 'node:fs/promises';
+import path from 'node:path';
+import { prisma } from '@wallpaper-manager/database';
+import { sanitizeError } from '@wallpaper-manager/wallpaper-files';
+import type { AuthStatus, SteamClient, SteamQrLoginState } from './steam';
+import type { SteamGuardClient } from './steamguard';
+
+const AUTH_TIMEOUT_MS = 120_000;
+const QR_TIMEOUT_MS = 300_000;
+const PASSWORD_PROMPT = /Enter account password/i;
+const DEVICE_GUARD_PROMPT = /2-factor auth code from your authenticator app/i;
+const EMAIL_GUARD_PROMPT = /auth code sent to the email/i;
+const GUARD_PROMPT = new RegExp(`${DEVICE_GUARD_PROMPT.source}|${EMAIL_GUARD_PROMPT.source}`, 'i');
+const INCORRECT_GUARD = /previous 2-factor auth code.*incorrect/i;
+const QR_MARKER = 'Use the Steam Mobile App to sign in with this QR code:';
+const QR_ACCOUNT = /Success! Next time you can login with -username ([^\s]+) -remember-password instead of -qr/i;
+
+interface ActiveProcess {
+  child: ChildProcess;
+  mode: 'login' | 'qr' | 'download';
+  output: string;
+  exited: boolean;
+  exitCode: number | null;
+  error: boolean;
+}
+
+export class DepotDownloaderClient implements SteamClient {
+  private active: ActiveProcess | null = null;
+  private starting = false;
+  private qrCode: string | null = null;
+  private qrUpdatedAt: string | null = null;
+  accountName: string | null = null;
+  steamId: string | null = null;
+  status: AuthStatus = 'auth_required';
+
+  constructor(private readonly binary: string, private readonly configDir: string, private readonly timeoutMs: number, private readonly steamGuard: SteamGuardClient) { }
+
+  async initialize(): Promise<void> {
+    const state = await prisma.steamAuthState.findUnique({ where: { id: 1 } });
+    this.accountName = state?.accountName || null;
+    this.steamId = state?.steamId || null;
+    this.status = state?.status === 'authenticated' && this.accountName ? 'authenticated' : 'auth_required';
+    if (state && state.status !== this.status) await this.updateState(this.status, this.status === 'auth_required' ? '请重新完成 Steam 登录' : null);
+  }
+
+  async updateState(status: AuthStatus, message: string | null = null): Promise<void> {
+    this.status = status;
+    console.log(`[steam] status=${status}${message ? ` message=${message}` : ''}`);
+    const data = { status, message, steamId: this.steamId, accountName: this.accountName };
+    await prisma.steamAuthState.upsert({ where: { id: 1 }, update: data, create: { id: 1, ...data } });
+  }
+
+  qrLoginState(): SteamQrLoginState {
+    return { status: this.status, qrCode: this.status === 'qr_required' ? this.qrCode : null, updatedAt: this.status === 'qr_required' ? this.qrUpdatedAt : null };
+  }
+
+  async startQrLogin(steamId?: string): Promise<void> {
+    if (steamId && !/^7656119\d{10}$/.test(steamId)) throw new Error('INVALID_STEAM_ID');
+    if (this.active || this.starting) throw new Error('STEAM_BUSY');
+    this.starting = true;
+    const probeDir = path.join(this.configDir, 'auth-probe');
+    let run: ActiveProcess | null = null;
+    try {
+      await mkdir(this.configDir, { recursive: true, mode: 0o700 });
+      await chmod(this.configDir, 0o700).catch(() => undefined);
+      await this.removeStoredSession();
+      await rm(probeDir, { recursive: true, force: true });
+      this.accountName = null;
+      this.steamId = steamId || null;
+      this.clearQr();
+      run = this.start('qr', ['-app', '431960', '-manifest-only', '-qr', '-remember-password', '-dir', probeDir]);
+      await this.updateState('qr_required', '请使用 Steam 手机 App 扫码并确认');
+    } finally {
+      this.starting = false;
+      if (run && this.status !== 'qr_required') {
+        this.terminate(run);
+        this.active = null;
+      }
+    }
+    void this.monitorQrLogin(run, probeDir);
+  }
+
+  async login(username: string, password: string, steamId?: string): Promise<void> {
+    if (!/^[^\s]{1,64}$/.test(username) || !password) throw new Error('INVALID_LOGIN');
+    if (steamId && !/^7656119\d{10}$/.test(steamId)) throw new Error('INVALID_STEAM_ID');
+    if (this.active || this.starting) throw new Error('STEAM_BUSY');
+
+    this.starting = true;
+    const probeDir = path.join(this.configDir, 'auth-probe');
+    try {
+      await mkdir(this.configDir, { recursive: true, mode: 0o700 });
+      await chmod(this.configDir, 0o700).catch(() => undefined);
+      const previousAccount = this.accountName;
+      this.accountName = username;
+      this.steamId = steamId || await this.steamGuard.steamId(username) || (previousAccount === username ? this.steamId : null);
+      await this.removeStoredSession();
+      await rm(probeDir, { recursive: true, force: true });
+    } finally {
+      this.starting = false;
+    }
+
+    this.clearQr();
+    const run = this.start('login', ['-app', '431960', '-manifest-only', '-username', username, '-remember-password', '-no-mobile', '-dir', probeDir]);
+    try {
+      let matched = await this.wait(run, new RegExp(`${PASSWORD_PROMPT.source}|${GUARD_PROMPT.source}`, 'i'), AUTH_TIMEOUT_MS);
+      if (!run.exited && PASSWORD_PROMPT.test(run.output)) {
+        run.output = '';
+        this.write(run, `${password.replace(/[\r\n]/g, '')}\n`);
+        password = '';
+        matched = await this.wait(run, GUARD_PROMPT, AUTH_TIMEOUT_MS);
+      }
+      if (run.exited) {
+        await this.completeLogin(run, probeDir);
+        return;
+      }
+      if (!matched) throw new Error('STEAM_AUTH_REQUIRED');
+
+      if (DEVICE_GUARD_PROMPT.test(run.output)) {
+        try {
+          const code = await this.steamGuard.generateCode(username);
+          run.output = '';
+          this.write(run, `${code}\n`);
+          await this.wait(run, INCORRECT_GUARD, AUTH_TIMEOUT_MS);
+          if (run.error) throw new Error('STEAM_AUTH_REQUIRED');
+          if (!run.exited && INCORRECT_GUARD.test(run.output)) throw new Error('STEAM_GUARD_REQUIRED');
+          if (run.exited) {
+            await this.completeLogin(run, probeDir);
+            return;
+          }
+        } catch (error) {
+          if (!(error instanceof Error) || error.message !== 'STEAM_GUARD_REQUIRED') throw error;
+          if (run.exited) throw error;
+        }
+      }
+      await this.updateState('guard_required', '请输入 Steam Guard 验证码');
+    } catch (error) {
+      this.terminate(run);
+      this.active = null;
+      await rm(probeDir, { recursive: true, force: true }).catch(() => undefined);
+      const code = error instanceof Error ? error.message : 'INTERNAL_ERROR';
+      await this.updateState(code === 'STEAM_AUTH_REQUIRED' ? 'auth_required' : 'error', safeAuthMessage(error));
+      throw error;
+    }
+  }
+
+  async guard(code: string): Promise<void> {
+    const run = this.active;
+    if (this.status !== 'guard_required' || !run || run.mode !== 'login' || !/^[A-Za-z0-9-]{4,16}$/.test(code)) throw new Error('STEAM_GUARD_REQUIRED');
+    run.output = '';
+    this.write(run, `${code}\n`);
+    try {
+      await this.wait(run, INCORRECT_GUARD, AUTH_TIMEOUT_MS);
+      if (!run.exited) {
+        await this.updateState('guard_required', 'Steam Guard 验证码无效，请重试');
+        throw new Error('STEAM_GUARD_REQUIRED');
+      }
+      await this.completeLogin(run, path.join(this.configDir, 'auth-probe'));
+    } catch (error) {
+      if (error instanceof Error && error.message === 'STEAM_GUARD_REQUIRED' && !run.exited) throw error;
+      this.terminate(run);
+      this.active = null;
+      await this.updateState('error', safeAuthMessage(error));
+      throw error;
+    }
+  }
+
+  async logout(): Promise<void> {
+    if (this.starting) throw new Error('STEAM_BUSY');
+    if (this.active) {
+      const run = this.active;
+      this.terminate(run);
+      await this.wait(run, /(?!)/, 5000).catch(() => undefined);
+    }
+    this.active = null;
+    this.clearQr();
+    await this.removeStoredSession();
+    await rm(path.join(this.configDir, 'auth-probe'), { recursive: true, force: true });
+    this.accountName = null;
+    this.steamId = null;
+    await this.updateState('auth_required');
+  }
+
+  async download(target: string, workshopId: string, isCancelled: () => Promise<boolean>): Promise<void> {
+    if (!/^\d+$/.test(workshopId)) throw new Error('BAD_REQUEST');
+    if (!this.accountName) throw new Error('STEAM_AUTH_REQUIRED');
+    if (this.active || this.starting) throw new Error(this.active?.mode === 'download' || this.starting ? 'STEAM_BUSY' : 'STEAM_AUTH_REQUIRED');
+    this.starting = true;
+    try {
+      await mkdir(target, { recursive: true, mode: 0o755 });
+    } finally {
+      this.starting = false;
+    }
+    const run = this.start('download', ['-app', '431960', '-pubfile', workshopId, '-username', this.accountName, '-remember-password', '-no-mobile', '-dir', target]);
+    try {
+      await this.wait(run, new RegExp(`${PASSWORD_PROMPT.source}|${GUARD_PROMPT.source}`, 'i'), this.timeoutMs, isCancelled);
+      if (!run.exited) {
+        this.terminate(run);
+        await this.updateState('auth_required', 'Steam 会话已失效，请重新登录');
+        throw new Error('STEAM_AUTH_REQUIRED');
+      }
+      if (run.exitCode !== 0 || run.error) throw new Error(downloadErrorCode(run.output));
+      await rm(path.join(target, '.DepotDownloader'), { recursive: true, force: true });
+      await this.updateState('authenticated');
+    } catch (error) {
+      this.terminate(run);
+      if (error instanceof Error && error.message === 'STEAM_AUTH_REQUIRED') await this.updateState('auth_required', 'Steam 会话已失效，请重新登录');
+      throw error;
+    } finally {
+      if (this.active === run) this.active = null;
+    }
+  }
+
+  async close(): Promise<void> {
+    if (this.active) this.terminate(this.active);
+    this.active = null;
+    this.clearQr();
+  }
+
+  private start(mode: ActiveProcess['mode'], args: string[]): ActiveProcess {
+    console.log(`[steam] starting DepotDownloader mode=${mode}`);
+    const env: NodeJS.ProcessEnv = { ...process.env, HOME: this.configDir };
+    delete env.STEAMGUARD_CLI_PASSKEY;
+    const child = spawn(this.binary, args, { env, stdio: ['pipe', 'pipe', 'pipe'] });
+    const run: ActiveProcess = { child, mode, output: '', exited: false, exitCode: null, error: false };
+    const onData = (chunk: Buffer) => {
+      run.output = (run.output + chunk.toString('utf8')).slice(-32_000);
+      if (run.mode === 'qr') this.captureQr(run.output);
+    };
+    child.stdout?.on('data', onData);
+    child.stderr?.on('data', onData);
+    child.on('error', () => { run.error = true; });
+    child.on('close', (code) => {
+      run.exited = true;
+      run.exitCode = code;
+      console.log(`[steam] DepotDownloader exited mode=${mode} code=${code ?? 'null'}`);
+    });
+    this.active = run;
+    return run;
+  }
+
+  private captureQr(output: string): void {
+    const marker = output.lastIndexOf(QR_MARKER);
+    if (marker < 0) return;
+    const qrCode = output.slice(marker + QR_MARKER.length).replace(/^(?:\r?\n)+/, '');
+    if (!qrCode || qrCode === this.qrCode) return;
+    this.qrCode = qrCode;
+    this.qrUpdatedAt = new Date().toISOString();
+  }
+
+  private async monitorQrLogin(run: ActiveProcess, probeDir: string): Promise<void> {
+    try {
+      await this.wait(run, /(?!)/, QR_TIMEOUT_MS);
+      if (this.active !== run) return;
+      if (run.exitCode !== 0 || run.error) throw new Error('STEAM_AUTH_REQUIRED');
+      const accountName = QR_ACCOUNT.exec(run.output)?.[1];
+      if (!accountName) throw new Error('QR_ACCOUNT_MISSING');
+      this.accountName = accountName;
+      this.steamId = this.steamId || await this.steamGuard.steamId(accountName);
+      await this.completeLogin(run, probeDir);
+    } catch (error) {
+      this.terminate(run);
+      if (this.active !== run) return;
+      this.active = null;
+      this.clearQr();
+      await rm(probeDir, { recursive: true, force: true }).catch(() => undefined);
+      const code = error instanceof Error ? error.message : 'INTERNAL_ERROR';
+      await this.updateState(code === 'STEAM_AUTH_REQUIRED' ? 'auth_required' : 'error', safeAuthMessage(error));
+    }
+  }
+
+  private write(run: ActiveProcess, value: string): void {
+    if (run.exited || !run.child.stdin?.writable) throw new Error(run.mode === 'login' ? 'STEAM_AUTH_REQUIRED' : 'STEAM_DOWNLOAD_FAILED');
+    run.child.stdin.write(value);
+  }
+
+  private async wait(run: ActiveProcess, pattern: RegExp, timeout: number, isCancelled?: () => Promise<boolean>): Promise<boolean> {
+    const deadline = Date.now() + timeout;
+    while (!run.exited && !run.error) {
+      if (isCancelled && await isCancelled()) {
+        this.terminate(run);
+        throw new Error('CANCELLED');
+      }
+      if (pattern.test(run.output)) return true;
+      if (Date.now() >= deadline) {
+        this.terminate(run);
+        throw new Error('DOWNLOAD_TIMEOUT');
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    return false;
+  }
+
+  private async completeLogin(run: ActiveProcess, probeDir: string): Promise<void> {
+    if (run.exitCode !== 0 || run.error) throw new Error('STEAM_AUTH_REQUIRED');
+    this.steamId = this.steamId || (this.accountName ? await this.steamGuard.steamId(this.accountName) : null);
+    if (this.active === run) this.active = null;
+    this.clearQr();
+    await rm(probeDir, { recursive: true, force: true }).catch(() => undefined);
+    await this.updateState('authenticated');
+  }
+
+  private clearQr(): void {
+    this.qrCode = null;
+    this.qrUpdatedAt = null;
+  }
+
+  private terminate(run: ActiveProcess): void {
+    if (run.exited) return;
+    run.child.kill('SIGTERM');
+    const timer = setTimeout(() => { if (!run.exited) run.child.kill('SIGKILL'); }, 5000);
+    timer.unref();
+  }
+
+  private async removeStoredSession(): Promise<void> {
+    const files: string[] = [];
+    const walk = async (directory: string): Promise<void> => {
+      const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
+      for (const entry of entries) {
+        const full = path.join(directory, entry.name);
+        if (entry.isDirectory()) await walk(full);
+        else if (entry.isFile() && entry.name === 'account.config') files.push(full);
+      }
+    };
+    await walk(this.configDir);
+    await Promise.all(files.map((file) => rm(file, { force: true })));
+  }
+}
+
+function downloadErrorCode(output: string): string {
+  if (/rate.?limit|too many requests|throttl/i.test(output)) return 'STEAM_RATE_LIMITED';
+  if (/file.?not.?found|not found|unsupported file type|unable to locate manifest/i.test(output)) return 'WORKSHOP_ITEM_NOT_FOUND';
+  if (/access token was rejected|failed to authenticate|invalid.?password|access denied|accountlogondenied/i.test(output)) return 'STEAM_AUTH_REQUIRED';
+  if (/no space left|ENOSPC/.test(output)) return 'DISK_FULL';
+  return 'STEAM_DOWNLOAD_FAILED';
+}
+
+export function safeAuthMessage(error: unknown): string {
+  const code = error instanceof Error ? error.message : 'INTERNAL_ERROR';
+  const messages: Record<string, string> = {
+    STEAM_AUTH_REQUIRED: 'Steam 登录失效，请重新登录',
+    STEAM_GUARD_REQUIRED: 'Steam Guard 验证失败',
+    STEAM_BUSY: '另一个 Steam 操作正在进行',
+    DOWNLOAD_TIMEOUT: 'DepotDownloader 操作超时',
+    INVALID_LOGIN: '用户名或密码格式无效',
+    INVALID_STEAM_ID: 'SteamID64 格式无效',
+    QR_ACCOUNT_MISSING: '扫码成功但未取得账号名，请改用账号密码登录',
+  };
+  return messages[code] || sanitizeError(error).message;
+}

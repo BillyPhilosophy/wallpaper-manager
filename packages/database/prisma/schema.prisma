@@ -47,9 +47,10 @@ model DownloadJob {
 }
 
 model SteamAuthState {
-  id        Int      @id @default(1)
-  status    String   @default("auth_required")
-  message   String?
-  steamId   String?
-  updatedAt DateTime @updatedAt
+  id          Int      @id @default(1)
+  status      String   @default("auth_required")
+  message     String?
+  accountName String?
+  steamId     String?
+  updatedAt   DateTime @updatedAt
 }

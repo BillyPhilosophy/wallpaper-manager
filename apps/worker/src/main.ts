@@ -3,13 +3,16 @@ import IORedis from 'ioredis';
 import { parseWorkerEnv } from '@wallpaper-manager/config';
 import { prisma, recoverInterruptedJobs } from '@wallpaper-manager/database';
 import { DownloadProcessor, deleteWallpaper, refreshDownloadedClassifications } from './processor';
-import { SteamCmdClient } from './steamcmd';
+import { DepotDownloaderClient } from './depotdownloader';
+import { SteamGuardClient } from './steamguard';
 import { startAuthServer } from './auth-server';
 
 async function main() {
   const env = parseWorkerEnv(); await recoverInterruptedJobs(prisma); await refreshDownloadedClassifications(env.STEAM_ROOT);
   const connection = new IORedis(env.REDIS_URL, { maxRetriesPerRequest: null });
-  const steam = new SteamCmdClient(env.STEAMCMD_BIN, env.STEAM_CONFIG_DIR, env.DOWNLOAD_TIMEOUT_MS);
+  const steamGuard = new SteamGuardClient(env.STEAMGUARD_BIN, env.STEAMGUARD_MAFILES_DIR, env.STEAMGUARD_CLI_PASSKEY_FILE);
+  const steam = new DepotDownloaderClient(env.DEPOTDOWNLOADER_BIN, env.STEAM_CONFIG_DIR, env.DOWNLOAD_TIMEOUT_MS, steamGuard);
+  await steam.initialize();
   const server = startAuthServer(steam); const processor = new DownloadProcessor(steam, connection, env.STAGING_DIR, env.STEAM_ROOT);
   const downloads = new Worker('wallpaper-downloads', (job) => processor.process(job as any), { connection, concurrency: env.DOWNLOAD_CONCURRENCY });
   const deletions = new Worker('wallpaper-deletions', (job) => deleteWallpaper(job.data, env.STEAM_ROOT, env.TRASH_DIR), { connection, concurrency: 1 });

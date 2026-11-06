@@ -10,14 +10,14 @@
 - 同步当前 Steam 账号的订阅列表；同步只加入网站，不会自动批量下载，取消订阅也不会删除本地文件。
 - 按内容分级和类型多选筛选本地壁纸；下载后以 `project.json` 中的 `contentrating` 和 `type` 为准。
 - 查看官方图片、动图、视频及完整元数据。
-- 配置 SteamCMD 登录并处理 Steam Guard。
+- 默认使用 Steam 手机 App 扫码登录，也支持账密登录、steamguard-cli 自动令牌和手工 Guard。
 - 下载、取消、重试和删除壁纸，展示真实任务阶段，不伪造下载百分比。
 - 使用固定版本的 `webwallgl@3.0.0` 在线预览已下载的 Scene／Web 壁纸。
 - 与 DSH 共用同一份原始工坊文件，下载后即可在 DSH 壁纸库中使用。
 - 通过暂存目录、资源校验和原子发布，避免网站或 DSH 读取半成品。
 - 阻止 Application／EXE 壁纸，不执行壁纸目录中的第三方程序。
 
-Steam Web API Key 和 SteamCMD 登录是两套独立配置。密码及 Guard 码不会写入数据库、BullMQ 任务或应用日志。
+Steam Web API Key 和 DepotDownloader 登录是两套独立配置。密码及 Guard 码不会写入数据库、BullMQ 任务或应用日志。
 
 ## 服务组成
 
@@ -25,7 +25,7 @@ Steam Web API Key 和 SteamCMD 登录是两套独立配置。密码及 Guard 码
 |---|---|---|
 | `web` | React 静态网站及 `/api` 反向代理 | 是，宿主机端口 `8083` |
 | `api` | NestJS API、SQLite、资源读取、任务入队 | 否 |
-| `worker` | SteamCMD 登录、下载、校验、发布和删除 | 否 |
+| `worker` | DepotDownloader 登录、下载、校验、发布和删除 | 否 |
 | `redis` | BullMQ 队列存储，开启 AOF 持久化 | 否 |
 
 部署时只需要反向代理 `web`，不要单独暴露 API、Worker 或 Redis。
@@ -51,12 +51,9 @@ Steam Web API Key 和 SteamCMD 登录是两套独立配置。密码及 Guard 码
 <用户名>/wallpaper-manager-web:latest
 <用户名>/wallpaper-manager-api:latest
 <用户名>/wallpaper-manager-worker:latest
-<用户名>/wallpaper-manager-worker:latest-rpi5
 ```
 
-`latest-rpi5` 使用适配 Pi 5 16KB 页内核的 Box64。树莓派 5 遇到 SteamCMD `SIGSEGV` 时，在设备端 `.env` 设置 `WORKER_IMAGE_SUFFIX=-rpi5`；其他 ARM64 设备通常保持为空。
-
-同时生成 `sha-<完整提交哈希>` 标签用于回滚，Pi 5 变体对应 `sha-<完整提交哈希>-rpi5`。设备端 `deploy/.env` 中的 `DOCKERHUB_USERNAME` 必须与这里一致，否则 Compose 会拉取其他命名空间下的镜像。`STEAM_WEB_API_KEY` 只在设备端配置，不需要也不应添加到 GitHub Actions Secrets。
+同时生成 `sha-<完整提交哈希>` 标签用于回滚。Worker 使用原生 ARM64 的 DepotDownloader 和 steamguard-cli，不再需要 Box64 或 Pi 5 专用镜像。设备端 `deploy/.env` 中的 `DOCKERHUB_USERNAME` 必须与这里一致，否则 Compose 会拉取其他命名空间下的镜像。`STEAM_WEB_API_KEY` 只在设备端配置，不需要也不应添加到 GitHub Actions Secrets。
 
 另一个 `.github/workflows/ci.yml` 会在 push 和 Pull Request 时自动执行类型检查、单元测试、构建和 E2E 测试，不需要 Docker Hub Secrets；它与镜像发布工作流相互独立。
 
@@ -88,7 +85,7 @@ HTTPS_PROXY=http://host.docker.internal:7890
 NO_PROXY=localhost,127.0.0.1,web,api,worker,redis
 ```
 
-Compose 会将 `host.docker.internal` 映射到宿主机网关。代理同时作用于工坊搜索、订阅同步和 SteamCMD 登录／下载；留空 `HTTP_PROXY` 和 `HTTPS_PROXY` 则保持直连。`NO_PROXY` 用于保证容器内部通信不经过代理。修改后需要重建 API 和 Worker 容器。
+Compose 会将 `host.docker.internal` 映射到宿主机网关。API 搜索和订阅同步使用代理；DepotDownloader 与 steamguard-cli 也会继承代理变量，但 Steam 连接和 CDN 下载仍须在目标网络实测。留空 `HTTP_PROXY` 和 `HTTPS_PROXY` 则保持直连。`NO_PROXY` 用于保证容器内部通信不经过代理。修改后需要重建 API 和 Worker 容器。
 
 ### 3. 启动服务
 
@@ -137,7 +134,7 @@ cp deploy/.env.example deploy/.env
 docker compose -f deploy/docker-compose.yml up -d --build
 ```
 
-Worker 镜像在 ARM64 上通过 Box64 运行官方 SteamCMD。镜像构建成功不代表 SteamCMD 已完成实机验收，仍需测试真实登录、Guard 和下载。
+Worker 镜像内置固定版本的原生 ARM64 DepotDownloader 和 steamguard-cli。镜像构建成功不代表 Steam 已完成实机验收，仍需测试真实登录、自动 Guard 和下载。配置方法见 `docs/steam-login.md`。
 
 ## DSH 接入
 
@@ -172,7 +169,7 @@ DSH_WE_STEAM_ROOT=/srv/wallpaper-manager/steam-data
 ├── app-data/       # SQLite 数据库
 ├── staging/        # 下载暂存，校验前不会进入正式壁纸库
 ├── steam-data/     # 网站 Worker 与 DSH 共享的原始壁纸文件
-├── steam-config/   # SteamCMD 会话，权限应为 0700
+├── steam-config/   # DepotDownloader 会话与 steamguard-cli maFiles，权限应为 0700
 └── trash/          # 删除时的原子移动区域
 ```
 
@@ -211,7 +208,7 @@ corepack pnpm test:e2e         # Playwright 浏览器测试
 apps/
   web/                 React 管理界面与 WebWallGL 预览
   api/                 NestJS API
-  worker/              BullMQ Worker 与 SteamCMD
+  worker/              BullMQ Worker 与 DepotDownloader
 packages/
   contracts/           共享 DTO、状态和错误契约
   database/            Prisma Schema、迁移和共享查询

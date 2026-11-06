@@ -18,7 +18,7 @@
 
 1. 搜索和浏览 Steam 创意工坊壁纸；
 2. 查看 Steam 官方图片、动图、视频及元数据；
-3. 配置 SteamCMD 登录并处理 Steam Guard；
+3. 配置 DepotDownloader 登录并处理 Steam Guard；
 4. 下载、重试、取消和删除壁纸；
 5. 对已下载的 Scene／Web 壁纸进行真实在线预览；
 6. 在 DSH 壁纸库中直接使用同一份已下载文件，无需二次下载或格式转换。
@@ -43,7 +43,7 @@
 | 数据库 | SQLite，使用 Prisma 管理 Schema 与迁移 |
 | 下载队列 | BullMQ |
 | 队列存储 | Redis，开启 AOF |
-| 下载器 | Worker 镜像内置树莓派 ARM64 可用的 SteamCMD 运行环境 |
+| 下载器 | Worker 镜像内置树莓派 ARM64 可用的 DepotDownloader 运行环境 |
 | 实时渲染 | `webwallgl@3.0.0`，使用 `save-exact` 固定 |
 | 部署 | Docker Compose |
 | 包管理 | pnpm workspace，锁文件必须提交 |
@@ -87,7 +87,7 @@ NestJS API
           │ BullMQ
           ▼
 Redis ◄──── Worker
-                ├── SteamCMD 登录与会话
+                ├── DepotDownloader 登录与会话
                 ├── 下载到 staging
                 ├── 校验 project.json 与资源
                 ├── 原子发布到 Workshop 根
@@ -104,7 +104,7 @@ Redis ◄──── Worker
 
 - `web`：前端构建产物和反向代理。
 - `api`：NestJS API、SQLite、资源读取、BullMQ 任务入队。
-- `worker`：SteamCMD、下载、校验、发布和删除。
+- `worker`：DepotDownloader、下载、校验、发布和删除。
 - `redis`：BullMQ 队列与短期缓存。
 - `dsh`：不作为本项目 Compose 的必填服务，由既有 DSH 部署按本文挂载契约接入。
 
@@ -139,7 +139,7 @@ Redis ◄──── Worker
 
 ```text
 /srv/wallpaper-manager/app-data/     # SQLite、应用配置
-/srv/wallpaper-manager/steam-config/ # SteamCMD 会话与非密码登录状态
+/srv/wallpaper-manager/steam-config/ # DepotDownloader 会话与受保护的 steamguard-cli maFiles
 /srv/wallpaper-manager/trash/        # 删除时的原子移入区域
 ```
 
@@ -160,7 +160,7 @@ MANAGER_ROOT=/wallpaper-manager
 STAGING_DIR=/wallpaper-manager/staging
 STEAM_ROOT=/wallpaper-manager/steam-data
 TRASH_DIR=/wallpaper-manager/trash
-STEAM_CONFIG_DIR=/steam-config
+STEAM_CONFIG_DIR=/steam-config/depotdownloader
 ```
 
 网站 API：
@@ -278,8 +278,8 @@ volumes:
 约束：
 
 - SQLite 备份和迁移由 API／迁移任务负责，不能让多个进程同时执行迁移。
-- Worker 下载并发默认 `1`，避免 SteamCMD 会话冲突和树莓派 IO 抖动。
-- 所有服务必须支持 ARM64；Worker 必须在真实树莓派上验证 SteamCMD，而非只做 x86 构建测试。
+- Worker 下载并发默认 `1`，避免 DepotDownloader 会话冲突和树莓派 IO 抖动。
+- 所有服务必须支持 ARM64；Worker 必须在真实树莓派上验证 DepotDownloader，而非只做 x86 构建测试。
 - 不在 Compose 中声明 Xvfb、Chromium、Docker Socket 或宿主机 GPU。
 
 ---
@@ -290,7 +290,7 @@ volumes:
 apps/
   web/                  # React 页面与预览组件
   api/                  # NestJS API
-  worker/               # BullMQ Worker 与 SteamCMD
+  worker/               # BullMQ Worker 与 DepotDownloader
 packages/
   contracts/            # API DTO、枚举、错误码、事件类型
   database/             # Prisma Schema、迁移、共享查询
@@ -315,7 +315,7 @@ tests/
 
 - `web` 只能依赖 `contracts`，不得依赖 Prisma 或 Node 文件系统模块。
 - `api` 和 `worker` 可依赖 `database`、`wallpaper-files`、`contracts`。
-- SteamCMD 调用只能存在于 `worker`。
+- DepotDownloader 调用只能存在于 `worker`。
 - WebWallGL 只能由 `web` 使用。
 - 所有路径安全校验集中在 `wallpaper-files`，禁止在 Controller 中临时实现。
 
@@ -369,14 +369,14 @@ not_downloaded
 - `failed/cancelled` 可以重新入队。
 - `downloaded` 删除时进入 `deleting`，成功后回到 `not_downloaded`。
 - API 与 Worker 更新状态必须使用条件更新，防止取消操作与完成回调互相覆盖。
-- SteamCMD 不提供可靠总进度时，界面只显示阶段，不伪造百分比。
+- DepotDownloader 不提供可靠总进度时，界面只显示阶段，不伪造百分比。
 
 ### 7.4 不保存的内容
 
 - Steam 密码。
 - Steam Guard 验证码。
 - 可直接在日志中泄露会话的命令行文本。
-- 数据库中的 SteamCMD 明文会话凭据。
+- 数据库中的 DepotDownloader 明文会话凭据。
 
 ---
 
@@ -425,12 +425,12 @@ GET /api/workshop/items/:workshopId
 
 - 使用 Steam 官方接口，不抓取 DeepSeek、第三方壁纸站或网页 HTML 作为元数据源。
 - `STEAM_WEB_API_KEY` 只存在服务端，绝不返回浏览器。
-- Steam Web API Key 与 SteamCMD 登录是两套独立配置。
+- Steam Web API Key 与 DepotDownloader 登录是两套独立配置。
 - 搜索响应保留 Steam 分页游标，不自行伪造游标。
 - 对官方元数据和预览地址做短期缓存，并处理限流。
 - 搜索阶段只返回官方预览和 `not_downloaded/downloaded` 等本地状态，不返回虚构的实时预览地址。
 
-### 8.3 SteamCMD 登录
+### 8.3 DepotDownloader 登录
 
 ```http
 GET  /api/steam/auth/status
@@ -459,10 +459,13 @@ Guard 请求：
 实现约束：
 
 - 密码和 Guard 码不得进入 BullMQ payload、SQLite、应用日志和错误堆栈。
-- 通过受控 stdin／PTY 与 SteamCMD 交互，禁止把密码拼入命令行参数。
-- 登录状态由 Worker 统一管理，API 只发送不含秘密的控制命令。
-- 支持 `authenticated/auth_required/guard_required/error` 状态。
-- 会话文件仅保存在 `steam-config` 卷，并限制文件权限。
+- 通过受控 stdin 与 DepotDownloader 交互，禁止把密码拼入命令行参数。
+- 默认通过 DepotDownloader `-qr` 提供手机扫码登录；二维码只保存在 Worker 内存，自动刷新且五分钟过期，不进入数据库、队列或日志。
+- 账密登录使用 `-no-mobile` 将手机确认切换为令牌码输入，steamguard-cli 自动产码；不可用时保留手工 Guard。
+- steamguard-cli maFiles 包含长期 2FA 密钥，只能保存在 `steam-config` 卷并限制权限；passkey 通过受保护文件读取，不进入命令行。
+- 登录状态由 Worker 统一管理，API 仅通过内部 HTTP 转发登录请求，不把秘密写入队列。
+- 支持 `authenticated/auth_required/guard_required/qr_required/error` 状态。
+- 持久化非敏感的账号名和 SteamID64，Worker 重启后使用 DepotDownloader refresh token，不再以内存认证状态阻止下载。
 - 会话失效后返回明确重新登录状态，不能无限重试。
 
 ### 8.4 壁纸与任务
@@ -483,7 +486,7 @@ GET    /api/downloads?status=&page=1&pageSize=20
 - `workshopId` 必须匹配 `^[0-9]+$`。
 - 同一壁纸最多存在一个活跃下载任务。
 - 已下载壁纸默认不重复下载，重复请求返回当前状态。
-- 取消下载必须终止对应 SteamCMD 子进程，再清理该任务 staging。
+- 取消下载必须终止对应 DepotDownloader 子进程，再清理该任务 staging。
 - 重试使用新 `jobId`，保留历史任务用于诊断。
 
 删除规则：
@@ -547,7 +550,7 @@ GET /api/wallpapers/:workshopId/resources/*
 领取任务
   → 检查 Steam 会话
   → 创建 staging/<jobId>
-  → SteamCMD 下载
+  → DepotDownloader 下载
   → 定位唯一的 431960/<workshopId>
   → 校验目录与 project.json
   → 识别壁纸类型和支持能力
@@ -573,7 +576,7 @@ GET /api/wallpapers/:workshopId/resources/*
 - 任何失败都先记录脱敏错误，再清理或隔离当前 `jobId` 的 staging。
 - Worker 重启后，活跃任务必须恢复为可重试状态，不能永久停留在 `downloading`。
 - 发布采用原子 rename；不得直接向正式目录流式写入。
-- 同一 SteamCMD 会话默认串行使用。
+- 同一 DepotDownloader 会话默认串行使用。
 - 捕获并分类：登录失效、Guard 要求、限流、网络错误、磁盘不足、下载超时、内容不支持、校验失败。
 
 建议错误码：
@@ -605,7 +608,7 @@ INTERNAL_ERROR
 2. **壁纸详情**：完整元数据、官方预览、本地下载状态、实时预览入口。
 3. **我的壁纸**：状态与类型过滤、搜索、删除、重新查看任务。
 4. **下载中心**：阶段、错误、重试、取消，不伪造进度。
-5. **Steam 设置**：API Key 配置状态、SteamCMD 登录、Guard 输入、会话状态。
+5. **Steam 设置**：API Key 配置状态、DepotDownloader 登录、Guard 输入、会话状态。
 
 API Key 若仅支持环境变量，界面只显示“已配置／未配置”，不提供读取原值的接口。
 
@@ -729,7 +732,7 @@ pnpm why webwallgl
 必须在目标树莓派完成：
 
 - `docker compose up -d` 全部服务健康。
-- SteamCMD 能启动并处理登录／Guard。
+- DepotDownloader 能启动并处理登录／Guard。
 - 完成一次真实搜索和下载。
 - 网站 Scene 实时预览可用。
 - DSH 清单和实际渲染可用。
@@ -746,7 +749,7 @@ pnpm why webwallgl
 
 - [ ] 搜索、详情和官方预览可用。
 - [ ] Steam Web API Key 不泄露到浏览器。
-- [ ] SteamCMD 登录、Guard 和会话失效流程可用。
+- [ ] DepotDownloader 登录、Guard 和会话失效流程可用。
 - [ ] 下载只写 staging，校验后原子发布。
 - [ ] 同一壁纸不会重复并发下载。
 - [ ] Scene／Web 使用固定 WebWallGL 版本在线预览。
@@ -801,7 +804,7 @@ pnpm why webwallgl
 
 依赖：与 Agent 3 先冻结认证状态和控制消息，不得传递密码到队列。
 
-### Agent 3：SteamCMD Worker
+### Agent 3：DepotDownloader Worker
 
 拥有：
 
@@ -810,7 +813,7 @@ pnpm why webwallgl
 
 交付：
 
-- ARM64 SteamCMD 运行环境。
+- ARM64 DepotDownloader 运行环境。
 - 登录／Guard 交互、下载、取消、校验、原子发布、删除。
 - 失败恢复和错误分类测试。
 
@@ -894,7 +897,7 @@ Agent 0 牵头，Agent 1／2／3／4／5 确认：
 
 - Agent 1：数据库、核心 API、资源服务。
 - Agent 2：搜索与认证控制面。
-- Agent 3：Worker 和 SteamCMD。
+- Agent 3：Worker 和 DepotDownloader。
 - Agent 4：使用 mock API 开发页面。
 - Agent 5：使用 fixture descriptor 开发预览。
 - Agent 6：Compose、部署文档、DSH 接入。

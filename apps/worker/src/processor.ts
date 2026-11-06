@@ -4,11 +4,11 @@ import IORedis from 'ioredis';
 import type { Job } from 'bullmq';
 import { prisma, PrismaClient } from '@wallpaper-manager/database';
 import { directorySize, inspectWallpaper, moveToTrash, publishDirectory, sanitizeError, stagingWorkshopDirectory, wallpaperDirectory } from '@wallpaper-manager/wallpaper-files';
-import type { SteamCmdClient } from './steamcmd';
+import type { SteamClient } from './steam';
 
 export interface DownloadPayload { jobId: string; workshopId: string }
 export class DownloadProcessor {
-  constructor(private readonly steam: SteamCmdClient, private readonly redis: IORedis, private readonly stagingDir: string, private readonly steamRoot: string, private readonly db: PrismaClient = prisma) {}
+  constructor(private readonly steam: SteamClient, private readonly redis: IORedis, private readonly stagingDir: string, private readonly steamRoot: string, private readonly db: PrismaClient = prisma) {}
   private cancelled(id: string) { return this.redis.exists(`wallpaper:cancel:${id}`).then(Boolean); }
   private async stage(id: string, workshopId: string, from: string[], to: string) {
     const changed = await this.db.downloadJob.updateMany({ where: { id, status: { in: from } }, data: { status: to, startedAt: to === 'downloading' ? new Date() : undefined } });
@@ -19,12 +19,11 @@ export class DownloadProcessor {
     const { jobId, workshopId } = job.data; const staging = path.join(this.stagingDir, jobId);
     try {
       if (await this.cancelled(jobId)) throw new Error('CANCELLED');
-      if (this.steam.status !== 'authenticated') throw new Error('STEAM_AUTH_REQUIRED');
       await this.stage(jobId, workshopId, ['queued'], 'downloading');
       await fs.mkdir(staging, { recursive: true, mode: 0o755 });
-      await this.steam.download(staging, workshopId, () => this.cancelled(jobId));
-      await this.stage(jobId, workshopId, ['downloading'], 'verifying');
       const source = stagingWorkshopDirectory(this.stagingDir, jobId, workshopId);
+      await this.steam.download(source, workshopId, () => this.cancelled(jobId));
+      await this.stage(jobId, workshopId, ['downloading'], 'verifying');
       const info = await inspectWallpaper(source);
       if (info.type === 'application' || info.type === 'unknown') throw new Error('UNSUPPORTED_TYPE');
       const size = await directorySize(source); if (!size) throw new Error('RESOURCE_MISSING');
@@ -57,7 +56,7 @@ export async function refreshDownloadedClassifications(steamRoot: string, db: Pr
 }
 export function sanitizeWorkerError(error: unknown): { code: string; message: string } {
   const code = error instanceof Error ? error.message : 'INTERNAL_ERROR';
-  const known: Record<string, string> = { STEAM_AUTH_REQUIRED: '需要先完成 Steam 登录', STEAM_GUARD_REQUIRED: '需要 Steam Guard 验证码', STEAM_RATE_LIMITED: 'Steam 下载限流，请稍后重试', STEAM_DOWNLOAD_FAILED: 'Steam 下载失败', DOWNLOAD_TIMEOUT: '下载超时', WORKSHOP_ITEM_NOT_FOUND: '工坊项目不存在或不可访问', UNSUPPORTED_TYPE: '不支持该壁纸类型', RESOURCE_MISSING: '壁纸关键资源缺失', CANCELLED: '用户已取消' };
+  const known: Record<string, string> = { STEAM_AUTH_REQUIRED: '需要先完成 Steam 登录', STEAM_GUARD_REQUIRED: '需要 Steam Guard 验证码', STEAM_BUSY: '另一个 Steam 操作正在进行', STEAM_RATE_LIMITED: 'Steam 下载限流，请稍后重试', STEAM_DOWNLOAD_FAILED: 'Steam 下载失败', DOWNLOAD_TIMEOUT: '下载超时', DISK_FULL: '磁盘空间不足', WORKSHOP_ITEM_NOT_FOUND: '工坊项目不存在或不可访问', UNSUPPORTED_TYPE: '不支持该壁纸类型', RESOURCE_MISSING: '壁纸关键资源缺失', CANCELLED: '用户已取消' };
   if (known[code]) return { code, message: known[code] };
   return sanitizeError(error);
 }

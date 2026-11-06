@@ -1,20 +1,34 @@
-FROM node:22-bookworm AS build
+FROM node:22-trixie AS build
 WORKDIR /app
-RUN corepack enable
+RUN npm install -g pnpm@10.32.1
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
 COPY packages ./packages
 COPY apps/worker ./apps/worker
-RUN pnpm install --frozen-lockfile && pnpm -r --filter @wallpaper-manager/worker... build
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile && pnpm -r --filter @wallpaper-manager/worker... build
 
-FROM node:22-bookworm-slim
-ARG BOX64_PACKAGE=box64
+FROM node:22-trixie-slim
+ARG TARGETARCH
+ARG DEPOTDOWNLOADER_VERSION=3.4.0
+ARG STEAMGUARD_VERSION=0.18.4
 ENV NODE_ENV=production
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl xz-utils gnupg && rm -rf /var/lib/apt/lists/* \
- && if [ "$(dpkg --print-architecture)" = "arm64" ]; then dpkg --add-architecture i386 && curl -fsSL https://ryanfortner.github.io/box64-debs/box64.list -o /etc/apt/sources.list.d/box64.list && curl -fsSL https://ryanfortner.github.io/box64-debs/KEY.gpg | gpg --dearmor -o /etc/apt/trusted.gpg.d/box64-debs-archive-keyring.gpg && apt-get update && apt-get install -y --no-install-recommends "$BOX64_PACKAGE" libc6:i386 libstdc++6:i386 libgcc-s1:i386 && rm -rf /var/lib/apt/lists/*; else apt-get update && apt-get install -y --no-install-recommends lib32gcc-s1 lib32stdc++6 && rm -rf /var/lib/apt/lists/*; fi
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl unzip && rm -rf /var/lib/apt/lists/*
+RUN set -eux; \
+    case "$TARGETARCH" in \
+      amd64) depot_arch=linux-x64; depot_sha256=a999dec66b4850fc961bd50366696d23c2d0fad7b18790e6a5647b2f19097a53; guard_arch=linux-x86_64; guard_sha256=323d81bbe5809b56dd7023223b9d553d1fda58dc1ec2173c1e07cdfe1af89687 ;; \
+      arm64) depot_arch=linux-arm64; depot_sha256=d9fb612ccebc1db8eeea3b4045d2221ec70431381393ce908fb72f01d4f9c812; guard_arch=linux-aarch64; guard_sha256=693e03e971b4edae562c37273a55f0d0a1d6c848845c801edfa91bf4cc849049 ;; \
+      *) echo "Unsupported architecture: $TARGETARCH"; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://github.com/SteamRE/DepotDownloader/releases/download/DepotDownloader_${DEPOTDOWNLOADER_VERSION}/DepotDownloader-${depot_arch}.zip" -o /tmp/depotdownloader.zip; \
+    echo "$depot_sha256  /tmp/depotdownloader.zip" | sha256sum -c -; \
+    mkdir -p /opt/depotdownloader; \
+    unzip -q /tmp/depotdownloader.zip -d /opt/depotdownloader; \
+    chmod 0755 /opt/depotdownloader/DepotDownloader; \
+    curl -fsSL "https://github.com/dyc3/steamguard-cli/releases/download/v${STEAMGUARD_VERSION}/steamguard-${guard_arch}" -o /tmp/steamguard; \
+    echo "$guard_sha256  /tmp/steamguard" | sha256sum -c -; \
+    install -m 0755 /tmp/steamguard /usr/local/bin/steamguard; \
+    rm -f /tmp/depotdownloader.zip /tmp/steamguard
 WORKDIR /app
-RUN corepack enable && mkdir -p /opt/steamcmd && curl -fsSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar -xz -C /opt/steamcmd \
- && printf '#!/bin/sh\nif [ "$(uname -m)" = "aarch64" ]; then export BOX64_LD_LIBRARY_PATH=/usr/lib/i386-linux-gnu:/lib/i386-linux-gnu; exec box64 /opt/steamcmd/linux32/steamcmd "$@"; else exec /opt/steamcmd/linux32/steamcmd "$@"; fi\n' > /opt/steamcmd/steamcmd.sh && chmod +x /opt/steamcmd/steamcmd.sh \
- && mkdir -p /app-data /wallpaper-manager /steam-config && chown -R node:node /app-data /wallpaper-manager /steam-config
+RUN mkdir -p /app-data /wallpaper-manager /steam-config && chown -R node:node /app-data /wallpaper-manager /steam-config
 COPY --from=build /app /app
 USER node
 EXPOSE 9780

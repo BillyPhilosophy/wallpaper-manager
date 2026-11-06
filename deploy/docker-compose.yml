@@ -45,12 +45,10 @@ services:
     healthcheck: { test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"], interval: 30s, timeout: 5s, retries: 5, start_period: 30s }
     restart: unless-stopped
   worker:
-    image: ${DOCKERHUB_USERNAME:-local}/wallpaper-manager-worker:${IMAGE_TAG:-latest}${WORKER_IMAGE_SUFFIX:-}
+    image: ${DOCKERHUB_USERNAME:-local}/wallpaper-manager-worker:${IMAGE_TAG:-latest}
     build:
       context: ..
       dockerfile: deploy/worker.Dockerfile
-      args:
-        BOX64_PACKAGE: "${BOX64_PACKAGE:-box64}"
     environment:
       NODE_ENV: production
       DATABASE_URL: file:/app-data/wallpaper-manager.db
@@ -59,8 +57,11 @@ services:
       STAGING_DIR: /wallpaper-manager/staging
       STEAM_ROOT: /wallpaper-manager/steam-data
       TRASH_DIR: /wallpaper-manager/trash
-      STEAM_CONFIG_DIR: /steam-config
-      STEAMCMD_BIN: /opt/steamcmd/steamcmd.sh
+      STEAM_CONFIG_DIR: /steam-config/depotdownloader
+      DEPOTDOWNLOADER_BIN: /opt/depotdownloader/DepotDownloader
+      STEAMGUARD_BIN: /usr/local/bin/steamguard
+      STEAMGUARD_MAFILES_DIR: /steam-config/steamguard/maFiles
+      STEAMGUARD_CLI_PASSKEY_FILE: ${STEAMGUARD_CLI_PASSKEY_FILE:-}
       HTTP_PROXY: ${HTTP_PROXY:-}
       HTTPS_PROXY: ${HTTPS_PROXY:-}
       NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,web,api,worker,redis}

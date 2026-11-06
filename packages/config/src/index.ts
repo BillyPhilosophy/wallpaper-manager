@@ -21,7 +21,10 @@ export const workerEnvSchema = z.object({
   TRASH_DIR: z.string().min(1).default('./trash'),
   STEAM_CONFIG_DIR: z.string().min(1).default('./steam-config'),
   STEAM_AUTH_SOCKET: z.string().default('/tmp/wallpaper-manager-steam-auth.sock'),
-  STEAMCMD_BIN: z.string().default('steamcmd'),
+  DEPOTDOWNLOADER_BIN: z.string().default('DepotDownloader'),
+  STEAMGUARD_BIN: z.string().default('steamguard'),
+  STEAMGUARD_MAFILES_DIR: z.string().default('./steam-config/steamguard/maFiles'),
+  STEAMGUARD_CLI_PASSKEY_FILE: z.string().optional(),
   DOWNLOAD_TIMEOUT_MS: z.coerce.number().int().positive().default(1_800_000),
   DOWNLOAD_CONCURRENCY: z.coerce.number().int().min(1).max(1).default(1),
 });

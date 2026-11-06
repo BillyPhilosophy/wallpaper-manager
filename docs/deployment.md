@@ -15,10 +15,9 @@ cp deploy/.env.example deploy/.env
 ```env
 DOCKERHUB_USERNAME=local
 IMAGE_TAG=latest
-WORKER_IMAGE_SUFFIX=
-BOX64_PACKAGE=box64
 WALLPAPER_DATA_ROOT=/srv/wallpaper-manager
 STEAM_WEB_API_KEY=
+# STEAMGUARD_CLI_PASSKEY_FILE=/steam-config/steamguard/passkey
 MAX_QUEUE_LENGTH=20
 # HTTP_PROXY=http://host.docker.internal:7890
 # HTTPS_PROXY=http://host.docker.internal:7890
@@ -27,7 +26,7 @@ NO_PROXY=localhost,127.0.0.1,web,api,worker,redis
 
 `WALLPAPER_DATA_ROOT` 是所有应用数据的宿主机根目录，可改为 `/mnt/wallpaper-disk/wallpaper-manager` 等外接硬盘路径。未设置时使用 `/srv/wallpaper-manager`。容器内部路径保持固定，不需要修改。
 
-发布工作流同时提供通用 Worker 和 Pi 5 16KB 页专用 Worker。Pi 5 使用 16KB 页内核且 SteamCMD 出现 `SIGSEGV` 时，设置 `WORKER_IMAGE_SUFFIX=-rpi5`，镜像标签会变成 `latest-rpi5` 或对应的提交标签。其他设备通常保持为空。本地源码构建 Pi 5 变体时，同时设置 `BOX64_PACKAGE=box64-rpi5arm64ps16k`。
+Worker 和发布工作流只提供一套原生 ARM64 镜像，不再区分 Pi 5 Box64 变体。自动手机令牌及可选的 maFiles passkey 配置见 `docs/steam-login.md`。
 
 Compose 的一次性 `init` 服务会自动创建 `app-data`、`staging`、`steam-data`、`steam-config` 和 `trash`，将应用目录所有权设为 UID/GID `1000:1000`，并将 `steam-config` 权限设为 `0700`。初始化成功后退出，API 和 Worker 仅在初始化成功后启动，重复启动不会清除已有数据。
 
@@ -35,7 +34,7 @@ Compose 的一次性 `init` 服务会自动创建 `app-data`、`staging`、`stea
 
 如果数据根目录位于外接硬盘，启动前必须确认硬盘已挂载。容器中的初始化服务无法可靠检测宿主机是否漏挂硬盘；否则 Docker 可能在系统盘创建同名目录并继续写入。
 
-如需通过宿主机代理访问 Steam，设置 `HTTP_PROXY` 和 `HTTPS_PROXY`，例如 `http://host.docker.internal:7890`。Compose 会把该主机名映射到 Docker 宿主机网关，代理服务应监听 `0.0.0.0` 并允许容器网段访问。API 的搜索、订阅同步和 Worker 的 SteamCMD 会使用代理；两个变量留空时直连。保留 `NO_PROXY` 中的内部服务名，避免内部请求进入代理。修改后重建 API 和 Worker 容器。
+如需通过宿主机代理访问 Steam，设置 `HTTP_PROXY` 和 `HTTPS_PROXY`，例如 `http://host.docker.internal:7890`。Compose 会把该主机名映射到 Docker 宿主机网关，代理服务应监听 `0.0.0.0` 并允许容器网段访问。API 的搜索和订阅同步使用代理；Worker 的 DepotDownloader 与 steamguard-cli 会继承代理变量，但 Steam 连接和 CDN 下载的代理行为仍需在目标网络实测。两个变量留空时直连。保留 `NO_PROXY` 中的内部服务名，避免内部请求进入代理。修改后重建 API 和 Worker 容器。
 
 ## 配置与启动
 
@@ -61,9 +60,9 @@ docker compose -f deploy/docker-compose.yml ps
 docker compose -f deploy/docker-compose.yml up -d --build
 ```
 
-API Key 也可通过 Compose 支持的安全密钥注入机制提供；不要提交 `deploy/.env`。它与 SteamCMD 登录无关。API 只读挂载 `steam-data`，Worker 可写共享目录，任何业务服务均不挂载 Docker Socket。只有一次性初始化服务以 root 运行，业务容器继续使用非 root 用户。
+API Key 也可通过 Compose 支持的安全密钥注入机制提供；不要提交 `deploy/.env`。它与 DepotDownloader 登录无关。API 只读挂载 `steam-data`，Worker 可写共享目录，任何业务服务均不挂载 Docker Socket。只有一次性初始化服务以 root 运行，业务容器继续使用非 root 用户。
 
-迁移仅由 API 容器启动命令执行，Worker 等待 API 健康后启动。Redis 已开启 AOF，Worker 并发固定为 1。Worker 镜像在 ARM64 上使用 Box64 运行官方 32 位 SteamCMD，仍需在目标 ARM64 Linux 设备上实测。
+迁移仅由 API 容器启动命令执行，Worker 等待 API 健康后启动。Redis 已开启 AOF，Worker 并发固定为 1。Worker 使用固定版本的原生 ARM64 DepotDownloader 和 steamguard-cli，不再需要 Box64 或 32 位运行库；真实登录、自动 Guard 和下载仍需在目标 ARM64 Linux 设备上实测。
 
 修改 `WALLPAPER_DATA_ROOT` 不会自动迁移已有数据。切换路径前应停止服务，将原数据完整迁移到新根目录并检查权限，同时更新 DSH 的共享目录配置。
 
