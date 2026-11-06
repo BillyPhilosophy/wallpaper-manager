@@ -47,7 +47,7 @@ export class SteamCmdClient extends EventEmitter {
       child.stdin?.write(`login ${username}\n`);
       await this.waitFor(/password:/i, 30000);
       child.stdin?.write(`${password.replace(/[\r\n]/g, '')}\n`);
-      await this.waitPrompt(120000);
+      await this.waitFor(/Steam>\s*$|Steam Guard|two-factor|authenticator.*code|verification code/i, 120000);
       if (this.status === 'guard_required') return;
       if (/FAILED|Invalid Password|incorrect/i.test(this.output)) throw new Error('STEAM_AUTH_REQUIRED');
       await this.updateState('authenticated');

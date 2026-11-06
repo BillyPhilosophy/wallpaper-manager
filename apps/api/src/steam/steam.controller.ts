@@ -3,7 +3,7 @@ import { Infrastructure } from '../common';
 
 async function workerControl(action: 'login' | 'guard' | 'logout', payload: Record<string, string> = {}): Promise<void> {
   try {
-    const response = await fetch(`http://worker:9780/auth/${action}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload), signal: AbortSignal.timeout(10000) });
+    const response = await fetch(`http://worker:9780/auth/${action}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload), signal: AbortSignal.timeout(130000) });
     if (!response.ok) { const body = await response.json().catch(() => ({ message: 'Steam 登录请求失败' })) as { code?: string; message?: string }; throw new ServiceUnavailableException({ code: body.code || 'STEAM_AUTH_REQUIRED', message: body.message || 'Steam 登录请求失败' }); }
   } catch (error) { if (error instanceof ServiceUnavailableException) throw error; throw new ServiceUnavailableException({ code: 'STEAM_AUTH_REQUIRED', message: 'Worker 登录服务不可用' }); }
 }
