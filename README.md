@@ -1,8 +1,8 @@
 # Wallpaper Manager
 
-运行在树莓派上的 Wallpaper Engine 创意工坊管理网站。用户可以在浏览器中搜索、下载、预览和删除壁纸，并与同一台机器上的 DSH Wallpaper Engine 插件共享原始壁纸文件，无需重复下载或格式转换。
+运行在 ARM64 Linux 设备上的 Wallpaper Engine 创意工坊管理网站。用户可以在浏览器中搜索、下载、预览和删除壁纸，并与同一台机器上的 DSH Wallpaper Engine 插件共享原始壁纸文件，无需重复下载或格式转换。
 
-项目面向 **ARM64 树莓派、Docker Compose、无桌面环境和局域网单用户** 场景。树莓派只负责存储、下载和 HTTP 服务，Scene／Web 壁纸的 WebGL 渲染在用户浏览器中完成。
+项目面向 **ARM64 Linux 设备、Docker Compose、无桌面环境和局域网单用户** 场景，树莓派是主要参考部署环境。设备只负责存储、下载和 HTTP 服务，Scene／Web 壁纸的 WebGL 渲染在用户浏览器中完成。
 
 ## 项目能做什么
 
@@ -30,16 +30,20 @@ Steam Web API Key 和 SteamCMD 登录是两套独立配置。密码及 Guard 码
 
 ## 使用 Docker Hub 部署（推荐）
 
-### 1. 发布 ARM64 镜像
+### 1. 通过 GitHub Actions 发布 ARM64 镜像
 
-在 GitHub 仓库的 **Settings → Secrets and variables → Actions** 中配置：
+项目提供 `.github/workflows/docker-image.yml`，用于手动构建并发布镜像。先准备 Docker Hub 账号，并在 Docker Hub 的 **Account settings → Security → Access tokens** 中创建具有仓库读写权限的 Access Token，不要使用账号密码。
 
-```text
-DOCKERHUB_USERNAME   Docker Hub 用户名
-DOCKERHUB_TOKEN      Docker Hub Access Token，不要使用账号密码
-```
+然后在 GitHub 仓库的 **Settings → Secrets and variables → Actions → Secrets** 页面点击 **New repository secret**，分别添加：
 
-在 Actions 页面手动运行 **build-images** 工作流。工作流会构建 `linux/arm64` 镜像，并分别推送：
+| Secret 名称 | 填写内容 |
+|---|---|
+| `DOCKERHUB_USERNAME` | Docker Hub 用户名或组织名，决定镜像命名空间 |
+| `DOCKERHUB_TOKEN` | 刚创建的 Docker Hub Access Token |
+
+如果是 Fork 的仓库，可能还需要先在 **Actions** 页面启用工作流。随后进入 **Actions → build-images → Run workflow**，选择要构建的分支并运行。该工作流只在手动触发时发布镜像，不会随每次提交自动推送。
+
+工作流通过 QEMU 和 Docker Buildx 并行构建 `web`、`api`、`worker` 三个 `linux/arm64` 镜像，并推送到 Docker Hub：
 
 ```text
 <用户名>/wallpaper-manager-web:latest
@@ -47,33 +51,36 @@ DOCKERHUB_TOKEN      Docker Hub Access Token，不要使用账号密码
 <用户名>/wallpaper-manager-worker:latest
 ```
 
-同时生成 `sha-<完整提交哈希>` 标签用于回滚。
+同时生成 `sha-<完整提交哈希>` 标签用于回滚。设备端 `deploy/.env` 中的 `DOCKERHUB_USERNAME` 必须与这里一致，否则 Compose 会拉取其他命名空间下的镜像。`STEAM_WEB_API_KEY` 只在设备端配置，不需要也不应添加到 GitHub Actions Secrets。
 
-### 2. 准备树莓派目录
+另一个 `.github/workflows/ci.yml` 会在 push 和 Pull Request 时自动执行类型检查、单元测试、构建和 E2E 测试，不需要 Docker Hub Secrets；它与镜像发布工作流相互独立。
 
-安装 Docker Engine 和 Docker Compose v2，然后创建持久化目录：
+### 2. 配置存储路径
+
+在 ARM64 Linux 设备上安装 Docker Engine 和 Docker Compose v2。将 `deploy/docker-compose.yml` 与同目录的 `.env.example` 下载到设备并保持原有目录结构，然后创建配置：
 
 ```bash
-sudo install -d -o 1000 -g 1000 -m 0755 \
-  /srv/wallpaper-manager/{app-data,staging,steam-data,steam-config,trash}
-
-sudo chmod 0700 /srv/wallpaper-manager/steam-config
-findmnt -T /srv/wallpaper-manager
+cp deploy/.env.example deploy/.env
 ```
 
-`staging`、`steam-data` 和 `trash` 必须位于同一文件系统。容器使用 UID/GID `1000:1000`，请确保 DSH 用户能够读取 `steam-data`，不要使用 root-only 权限或直接开放 `0777`。
+编辑 `deploy/.env`，至少设置 `DOCKERHUB_USERNAME` 和 `STEAM_WEB_API_KEY`。`WALLPAPER_DATA_ROOT` 默认为 `/srv/wallpaper-manager`，壁纸较多时建议改为外接硬盘路径，例如：
+
+```env
+WALLPAPER_DATA_ROOT=/mnt/wallpaper-disk/wallpaper-manager
+```
+
+启动时，Compose 的一次性 `init` 服务会自动创建所有数据目录并设置权限，无需手动执行建目录命令。`staging`、`steam-data` 和 `trash` 位于同一数据根目录，必须保持在同一文件系统。容器使用 UID/GID `1000:1000`，请确保 DSH 用户能够读取 `steam-data`，不要开放 `0777`。
+
+如果数据目录位于外接硬盘，启动前必须确认硬盘已经挂载。容器无法可靠检测宿主机是否漏挂硬盘；否则 Docker 可能在系统盘创建同名目录。
 
 ### 3. 启动服务
 
-将项目的 `deploy/docker-compose.yml` 下载到树莓派，在该文件所在目录执行：
+在项目根目录执行：
 
 ```bash
-export DOCKERHUB_USERNAME='你的Docker Hub用户名'
-export STEAM_WEB_API_KEY='你的Steam Web API Key'
-
-docker compose pull
-docker compose up -d
-docker compose ps
+docker compose -f deploy/docker-compose.yml pull
+docker compose -f deploy/docker-compose.yml up -d
+docker compose -f deploy/docker-compose.yml ps
 ```
 
 看到全部服务健康后访问：
@@ -96,36 +103,28 @@ curl http://树莓派IP:8083/api/system/capabilities
 更新到最新镜像：
 
 ```bash
-docker compose pull
-docker compose up -d
+docker compose -f deploy/docker-compose.yml pull
+docker compose -f deploy/docker-compose.yml up -d
 ```
 
-回滚到指定提交：
+回滚时在 `deploy/.env` 中设置 `IMAGE_TAG=sha-<完整提交哈希>`，再重新执行上述 `pull` 和 `up -d` 命令。
 
-```bash
-export IMAGE_TAG='sha-<完整提交哈希>'
-docker compose pull
-docker compose up -d
-```
+修改 `WALLPAPER_DATA_ROOT` 不会自动迁移已有数据。切换路径前应停止服务，将原数据完整迁移到新根目录并检查权限。
 
 ## 从源码构建部署
 
-在树莓派上取得完整源码后执行：
+在树莓派上取得完整源码，复制并编辑 `deploy/.env` 后执行：
 
 ```bash
-sudo install -d -o 1000 -g 1000 -m 0755 \
-  /srv/wallpaper-manager/{app-data,staging,steam-data,steam-config,trash}
-sudo chmod 0700 /srv/wallpaper-manager/steam-config
-
-cd deploy
-STEAM_WEB_API_KEY='你的Steam Web API Key' docker compose up -d --build
+cp deploy/.env.example deploy/.env
+docker compose -f deploy/docker-compose.yml up -d --build
 ```
 
 Worker 镜像在 ARM64 上通过 Box64 运行官方 SteamCMD。镜像构建成功不代表 SteamCMD 已完成实机验收，仍需测试真实登录、Guard 和下载。
 
 ## DSH 接入
 
-如果 DSH 也使用 Docker Compose，为其增加只读挂载和环境变量：
+如果 DSH 也使用 Docker Compose，为其增加只读挂载和环境变量，将示例中的数据根目录替换为实际 `WALLPAPER_DATA_ROOT`：
 
 ```yaml
 services:
@@ -149,6 +148,8 @@ DSH_WE_STEAM_ROOT=/srv/wallpaper-manager/steam-data
 
 ## 数据目录
 
+以下目录均位于 `deploy/.env` 配置的 `WALLPAPER_DATA_ROOT` 下：
+
 ```text
 /srv/wallpaper-manager/
 ├── app-data/       # SQLite 数据库
@@ -161,10 +162,10 @@ DSH_WE_STEAM_ROOT=/srv/wallpaper-manager/steam-data
 备份前建议暂停 API 和 Worker：
 
 ```bash
-docker compose stop api worker
+docker compose -f deploy/docker-compose.yml stop api worker
 ```
 
-随后备份 `app-data`、`steam-config` 和 `steam-data`，恢复时检查目录所有权，再执行 `docker compose up -d`。
+随后备份 `app-data`、`steam-config` 和 `steam-data`，恢复时检查目录所有权，再执行 `up -d`。
 
 ## 本地开发
 

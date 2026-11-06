@@ -1,4 +1,18 @@
 services:
+  init:
+    image: alpine:3.21
+    user: "0:0"
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        mkdir -p /wallpaper-manager/app-data /wallpaper-manager/staging /wallpaper-manager/steam-data /wallpaper-manager/steam-config /wallpaper-manager/trash
+        chown 1000:1000 /wallpaper-manager/app-data /wallpaper-manager/staging /wallpaper-manager/steam-data /wallpaper-manager/steam-config /wallpaper-manager/trash
+        chmod 0755 /wallpaper-manager/app-data /wallpaper-manager/staging /wallpaper-manager/steam-data /wallpaper-manager/trash
+        chmod 0700 /wallpaper-manager/steam-config
+    volumes:
+      - ${WALLPAPER_DATA_ROOT:-/srv/wallpaper-manager}:/wallpaper-manager
+    restart: "no"
   web:
     image: ${DOCKERHUB_USERNAME:-local}/wallpaper-manager-web:${IMAGE_TAG:-latest}
     build: { context: .., dockerfile: deploy/web.Dockerfile }
@@ -16,9 +30,11 @@ services:
       STEAM_WEB_API_KEY: ${STEAM_WEB_API_KEY:-}
       MAX_QUEUE_LENGTH: ${MAX_QUEUE_LENGTH:-20}
     volumes:
-      - /srv/wallpaper-manager/app-data:/app-data
-      - /srv/wallpaper-manager/steam-data:/wallpaper-manager/steam-data:ro
-    depends_on: { redis: { condition: service_healthy } }
+      - ${WALLPAPER_DATA_ROOT:-/srv/wallpaper-manager}/app-data:/app-data
+      - ${WALLPAPER_DATA_ROOT:-/srv/wallpaper-manager}/steam-data:/wallpaper-manager/steam-data:ro
+    depends_on:
+      init: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
     healthcheck: { test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"], interval: 30s, timeout: 5s, retries: 5, start_period: 30s }
     restart: unless-stopped
   worker:
@@ -35,10 +51,13 @@ services:
       STEAM_CONFIG_DIR: /steam-config
       STEAMCMD_BIN: /opt/steamcmd/steamcmd.sh
     volumes:
-      - /srv/wallpaper-manager/app-data:/app-data
-      - /srv/wallpaper-manager:/wallpaper-manager
-      - /srv/wallpaper-manager/steam-config:/steam-config
-    depends_on: { redis: { condition: service_healthy }, api: { condition: service_healthy } }
+      - ${WALLPAPER_DATA_ROOT:-/srv/wallpaper-manager}/app-data:/app-data
+      - ${WALLPAPER_DATA_ROOT:-/srv/wallpaper-manager}:/wallpaper-manager
+      - ${WALLPAPER_DATA_ROOT:-/srv/wallpaper-manager}/steam-config:/steam-config
+    depends_on:
+      init: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+      api: { condition: service_healthy }
     healthcheck: { test: ["CMD", "node", "-e", "fetch('http://localhost:9780/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"], interval: 30s, timeout: 5s, retries: 5, start_period: 30s }
     restart: unless-stopped
   redis:

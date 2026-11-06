@@ -2,7 +2,7 @@
 
 基线为 `elysia395/dsh-wallpaper-engine` 插件 `1.4.0`（`cde8e9c66972f47f6d369f5e51484ca8fa48c9b5`）与 WebWallGL `3.0.0`。
 
-DSH Compose 服务增加以下只读挂载，其余配置保持不变：
+DSH Compose 服务增加以下只读挂载，其余配置保持不变。将示例中的 `/srv/wallpaper-manager` 替换为 Wallpaper Manager 在 `deploy/.env` 中配置的实际 `WALLPAPER_DATA_ROOT`：
 
 ```yaml
 services:
