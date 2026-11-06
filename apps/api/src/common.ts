@@ -1,4 +1,4 @@
-import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Injectable, Module, OnModuleDestroy } from '@nestjs/common';
+import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Injectable, Logger, Module, OnModuleDestroy } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { Request, Response } from 'express';
 import { Queue } from 'bullmq';
@@ -8,6 +8,7 @@ import { sanitizeError, WallpaperFileError } from '@wallpaper-manager/wallpaper-
 
 @Catch()
 export class ApiExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger('API');
   catch(exception: unknown, host: ArgumentsHost) {
     const response = host.switchToHttp().getResponse<Response>();
     const request = host.switchToHttp().getRequest<Request>();
@@ -21,6 +22,9 @@ export class ApiExceptionFilter implements ExceptionFilter {
     } else if (exception instanceof WallpaperFileError) {
       status = exception.code === 'NOT_FOUND' ? 404 : exception.code === 'PATH_UNSAFE' ? 400 : 409; code = exception.code; message = exception.message;
     } else { const safe = sanitizeError(exception); code = safe.code; message = safe.message; }
+    const route = request.route?.path || request.path;
+    const entry = `requestId=${requestId} method=${request.method} route=${route} status=${status} code=${code}`;
+    if (status >= 500) this.logger.error(`${entry} exception=${exception instanceof Error ? exception.name : 'Unknown'}`); else this.logger.warn(entry);
     response.status(status).json({ code, message: String(message).slice(0, 500), requestId });
   }
 }

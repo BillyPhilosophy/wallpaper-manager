@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { createReadStream, promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { Request, Response } from 'express';
-import { ACTIVE_DOWNLOAD_STATUSES, WALLPAPER_STATUSES, WALLPAPER_TYPES } from '@wallpaper-manager/contracts';
+import { ACTIVE_DOWNLOAD_STATUSES, CONTENT_RATINGS, WALLPAPER_STATUSES, WALLPAPER_TYPES } from '@wallpaper-manager/contracts';
 import { assertWorkshopId, previewDescriptor, resolveResourcePath, safeJobId, wallpaperDirectory } from '@wallpaper-manager/wallpaper-files';
 import { Infrastructure, serializeJob, serializeWallpaper } from '../common';
 
@@ -13,11 +13,11 @@ const mime: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js
 export class WallpapersController {
   constructor(private readonly infra: Infrastructure) {}
   @Get('wallpapers')
-  async list(@Query('q') q = '', @Query('type') type = '', @Query('status') status = '', @Query('page') pageValue = '1', @Query('pageSize') sizeValue = '24') {
+  async list(@Query('q') q = '', @Query('type') type = '', @Query('rating') rating = '', @Query('status') status = '', @Query('page') pageValue = '1', @Query('pageSize') sizeValue = '24') {
     const page = positive(pageValue, 1); const pageSize = Math.min(positive(sizeValue, 24), 100);
-    if (type && !WALLPAPER_TYPES.includes(type as any)) throw new BadRequestException('无效类型');
+    const types = filterValues(type, WALLPAPER_TYPES, '无效类型'); const ratings = filterValues(rating, CONTENT_RATINGS, '无效内容分级');
     if (status && !WALLPAPER_STATUSES.includes(status as any)) throw new BadRequestException('无效状态');
-    const where = { ...(q ? { OR: [{ title: { contains: q.slice(0, 100) } }, { workshopId: { contains: q.slice(0, 100) } }] } : {}), ...(type ? { type } : {}), ...(status ? { status } : {}) };
+    const where = { ...(q ? { OR: [{ title: { contains: q.slice(0, 100) } }, { workshopId: { contains: q.slice(0, 100) } }] } : {}), ...(type ? { type: { in: types } } : {}), ...(rating ? { contentRating: { in: ratings } } : {}), ...(status ? { status } : {}) };
     const [items, total] = await Promise.all([this.infra.db.wallpaper.findMany({ where, orderBy: { updatedAt: 'desc' }, skip: (page - 1) * pageSize, take: pageSize }), this.infra.db.wallpaper.count({ where })]);
     return { items: items.map(serializeWallpaper), page, pageSize, total };
   }
@@ -111,3 +111,8 @@ export class WallpapersController {
   private async find(id: string) { assertWorkshopId(id); const item = await this.infra.db.wallpaper.findUnique({ where: { workshopId: id } }); if (!item) throw new NotFoundException('壁纸不存在'); return item; }
 }
 function positive(value: string, fallback: number): number { const n = Number(value); return Number.isInteger(n) && n > 0 ? n : fallback; }
+function filterValues(value: string, allowed: readonly string[], message: string): string[] {
+  const values = value ? value.split(',').filter(Boolean) : [];
+  if (values.some((entry) => !allowed.includes(entry))) throw new BadRequestException(message);
+  return values;
+}

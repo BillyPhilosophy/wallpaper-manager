@@ -32,7 +32,7 @@ export class DownloadProcessor {
       const destination = await publishDirectory(source, this.steamRoot, workshopId);
       const changed = await this.db.$transaction(async (tx) => {
         const result = await tx.downloadJob.updateMany({ where: { id: jobId, status: 'publishing' }, data: { status: 'succeeded', activeWorkshopId: null, finishedAt: new Date(), errorCode: null, errorMessage: null } });
-        if (result.count) await tx.wallpaper.update({ where: { workshopId }, data: { title: typeof info.project.title === 'string' ? info.project.title : undefined, type: info.type, metadataJson: JSON.stringify({ ...info.project, __entry: info.entry }), localRelativePath: workshopId, status: 'downloaded', fileSizeBytes: size, downloadedAt: (await tx.wallpaper.findUnique({ where: { workshopId } }))?.downloadedAt || new Date(), lastErrorCode: null, lastErrorMessage: null } });
+        if (result.count) await tx.wallpaper.update({ where: { workshopId }, data: { title: typeof info.project.title === 'string' ? info.project.title : undefined, type: info.type, contentRating: info.contentRating, metadataJson: JSON.stringify({ ...info.project, __entry: info.entry }), localRelativePath: workshopId, status: 'downloaded', fileSizeBytes: size, downloadedAt: (await tx.wallpaper.findUnique({ where: { workshopId } }))?.downloadedAt || new Date(), lastErrorCode: null, lastErrorMessage: null } });
         return result.count;
       });
       if (!changed) { const trash = path.join(this.stagingDir, '..', 'trash'); await moveToTrash(this.steamRoot, trash, workshopId).then((target) => fs.rm(target, { recursive: true, force: true })); throw new Error('CANCELLED'); }
@@ -44,6 +44,15 @@ export class DownloadProcessor {
       await fs.rm(staging, { recursive: true, force: true }).catch(() => undefined);
       if (cancelled) return; throw error;
     }
+  }
+}
+export async function refreshDownloadedClassifications(steamRoot: string, db: PrismaClient = prisma): Promise<void> {
+  const wallpapers = await db.wallpaper.findMany({ where: { status: 'downloaded' }, select: { workshopId: true } });
+  for (const wallpaper of wallpapers) {
+    try {
+      const info = await inspectWallpaper(wallpaperDirectory(steamRoot, wallpaper.workshopId));
+      await db.wallpaper.update({ where: { workshopId: wallpaper.workshopId }, data: { title: typeof info.project.title === 'string' ? info.project.title : undefined, type: info.type, contentRating: info.contentRating, metadataJson: JSON.stringify({ ...info.project, __entry: info.entry }) } });
+    } catch { }
   }
 }
 export function sanitizeWorkerError(error: unknown): { code: string; message: string } {

@@ -6,5 +6,6 @@ export async function api<T>(url: string, init?: RequestInit): Promise<T> {
   return response.json();
 }
 export const post = <T>(url: string, body?: unknown) => api<T>(url, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) });
-export const typeLabel: Record<string, string> = { scene: '场景', web: '网页', video: '视频', application: '应用', unknown: '未知' };
+export const typeLabel: Record<string, string> = { scene: '场景', web: '网页', video: '视频', image: '图片', application: '应用', unknown: '未知' };
+export const ratingLabel: Record<string, string> = { everyone: '全年龄', pg13: 'PG13', mature: '成人', unrated: '未分级' };
 export const statusLabel: Record<string, string> = { not_downloaded: '未下载', queued: '等待下载', downloading: '下载中', verifying: '校验中', publishing: '发布中', downloaded: '已下载', deleting: '删除中', succeeded: '已完成', failed: '失败', cancelled: '已取消' };

@@ -12,6 +12,8 @@ model Wallpaper {
   title             String
   description       String?
   type              String        @default("unknown")
+  contentRating     String        @default("unrated")
+  subscribed        Boolean       @default(false)
   officialPreviewUrl String?
   metadataJson      String        @default("{}")
   localRelativePath String?
@@ -48,5 +50,6 @@ model SteamAuthState {
   id        Int      @id @default(1)
   status    String   @default("auth_required")
   message   String?
+  steamId   String?
   updatedAt DateTime @updatedAt
 }

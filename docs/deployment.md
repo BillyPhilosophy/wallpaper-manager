@@ -18,6 +18,9 @@ IMAGE_TAG=latest
 WALLPAPER_DATA_ROOT=/srv/wallpaper-manager
 STEAM_WEB_API_KEY=
 MAX_QUEUE_LENGTH=20
+# HTTP_PROXY=http://host.docker.internal:7890
+# HTTPS_PROXY=http://host.docker.internal:7890
+NO_PROXY=localhost,127.0.0.1,web,api,worker,redis
 ```
 
 `WALLPAPER_DATA_ROOT` 是所有应用数据的宿主机根目录，可改为 `/mnt/wallpaper-disk/wallpaper-manager` 等外接硬盘路径。未设置时使用 `/srv/wallpaper-manager`。容器内部路径保持固定，不需要修改。
@@ -27,6 +30,8 @@ Compose 的一次性 `init` 服务会自动创建 `app-data`、`staging`、`stea
 `staging`、`steam-data`、`trash` 必须保持在同一文件系统。若 DSH 使用其他用户，应通过共享组或严格的最小 ACL 授予 `steam-data` 读权限，不要开放 `0777`。
 
 如果数据根目录位于外接硬盘，启动前必须确认硬盘已挂载。容器中的初始化服务无法可靠检测宿主机是否漏挂硬盘；否则 Docker 可能在系统盘创建同名目录并继续写入。
+
+如需通过宿主机代理访问 Steam，设置 `HTTP_PROXY` 和 `HTTPS_PROXY`，例如 `http://host.docker.internal:7890`。Compose 会把该主机名映射到 Docker 宿主机网关，代理服务应监听 `0.0.0.0` 并允许容器网段访问。API 的搜索、订阅同步和 Worker 的 SteamCMD 会使用代理；两个变量留空时直连。保留 `NO_PROXY` 中的内部服务名，避免内部请求进入代理。修改后重建 API 和 Worker 容器。
 
 ## 配置与启动
 

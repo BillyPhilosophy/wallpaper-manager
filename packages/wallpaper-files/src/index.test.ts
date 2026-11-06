@@ -17,6 +17,11 @@ describe('project parsing', () => {
     await writeFile(path.join(root, 'project.json'), JSON.stringify({ type: 'web', file: 'index.html' })); await writeFile(path.join(root, 'index.html'), '<html>');
     expect((await inspectWallpaper(root)).type).toBe('web');
   });
+  it('reads content rating and validates image entries', async () => {
+    await writeFile(path.join(root, 'project.json'), JSON.stringify({ type: 'image', file: 'wallpaper.png', contentrating: 'PG13' })); await writeFile(path.join(root, 'wallpaper.png'), 'fixture');
+    const info = await inspectWallpaper(root);
+    expect(info.type).toBe('image'); expect(info.contentRating).toBe('pg13');
+  });
   it('rejects missing project and application', async () => { await expect(inspectWallpaper(root)).rejects.toMatchObject({ code: 'INVALID_PROJECT' }); await writeFile(path.join(root, 'project.json'), '{"type":"application"}'); await expect(inspectWallpaper(root)).rejects.toMatchObject({ code: 'UNSUPPORTED_TYPE' }); });
 });
 describe('resource security', () => {

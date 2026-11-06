@@ -2,12 +2,12 @@ import { Worker } from 'bullmq';
 import IORedis from 'ioredis';
 import { parseWorkerEnv } from '@wallpaper-manager/config';
 import { prisma, recoverInterruptedJobs } from '@wallpaper-manager/database';
-import { DownloadProcessor, deleteWallpaper } from './processor';
+import { DownloadProcessor, deleteWallpaper, refreshDownloadedClassifications } from './processor';
 import { SteamCmdClient } from './steamcmd';
 import { startAuthServer } from './auth-server';
 
 async function main() {
-  const env = parseWorkerEnv(); await recoverInterruptedJobs(prisma);
+  const env = parseWorkerEnv(); await recoverInterruptedJobs(prisma); await refreshDownloadedClassifications(env.STEAM_ROOT);
   const connection = new IORedis(env.REDIS_URL, { maxRetriesPerRequest: null });
   const steam = new SteamCmdClient(env.STEAMCMD_BIN, env.STEAM_CONFIG_DIR, env.DOWNLOAD_TIMEOUT_MS);
   const server = startAuthServer(steam); const processor = new DownloadProcessor(steam, connection, env.STAGING_DIR, env.STEAM_ROOT);

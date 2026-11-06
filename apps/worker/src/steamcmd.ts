@@ -10,27 +10,30 @@ export class SteamCmdClient extends EventEmitter {
   private output = '';
   private promptWaiters: (() => void)[] = [];
   private username = '';
+  steamId: string | null = null;
   status: AuthStatus = 'auth_required';
   constructor(private readonly binary: string, private readonly configDir: string, private readonly timeoutMs: number) { super(); }
   async updateState(status: AuthStatus, message: string | null = null) {
     this.status = status;
-    await prisma.steamAuthState.upsert({ where: { id: 1 }, update: { status, message }, create: { id: 1, status, message } });
+    console.log(`[steam] status=${status}${message ? ` message=${message}` : ''}`);
+    await prisma.steamAuthState.upsert({ where: { id: 1 }, update: { status, message, steamId: this.steamId }, create: { id: 1, status, message, steamId: this.steamId } });
   }
   private async ensureProcess(): Promise<ChildProcess> {
     if (this.process && this.process.exitCode === null && !this.process.killed) return this.process;
     await mkdir(this.configDir, { recursive: true, mode: 0o700 }); await chmod(this.configDir, 0o700).catch(() => undefined);
+    console.log('[steam] starting SteamCMD');
     const child = spawn(this.binary, [], { env: { ...process.env, HOME: this.configDir }, stdio: ['pipe', 'pipe', 'pipe'] });
     this.process = child; this.output = '';
     const onData = (chunk: Buffer) => {
       this.output = (this.output + chunk.toString('utf8')).slice(-32_000);
       if (/Steam Guard|two-factor|authenticator.*code|verification code/i.test(this.output)) { this.status = 'guard_required'; void this.updateState('guard_required', '需要 Steam Guard 验证码'); }
-      if (/Logging in user.*OK|Logged in OK|login.*success/i.test(this.output)) { this.status = 'authenticated'; void this.updateState('authenticated'); }
+      if (/Logging in user.*OK|Logged in OK|login.*success/i.test(this.output)) { this.steamId = steamIdFromOutput(this.output) || this.steamId; this.status = 'authenticated'; void this.updateState('authenticated'); }
       if (/Steam>\s*$/.test(this.output)) { const waiters = this.promptWaiters.splice(0); waiters.forEach((resolve) => resolve()); }
     };
     child.stdout?.on('data', onData); child.stderr?.on('data', onData);
     child.on('error', () => void this.updateState('error', 'SteamCMD 无法启动'));
-    child.on('exit', () => { if (this.process === child) this.process = null; });
-    await this.waitPrompt(30000); return child;
+    child.on('exit', (code, signal) => { console.warn(`[steam] process exited code=${code ?? 'null'} signal=${signal || 'none'}`); if (this.process === child) this.process = null; });
+    await this.waitPrompt(30000); console.log('[steam] prompt ready'); return child;
   }
   private waitPrompt(timeout = this.timeoutMs): Promise<void> {
     if (/Steam>\s*$/.test(this.output)) return Promise.resolve();
@@ -90,4 +93,9 @@ export function safeAuthMessage(error: unknown): string {
   const code = error instanceof Error ? error.message : 'INTERNAL_ERROR';
   const messages: Record<string, string> = { STEAM_AUTH_REQUIRED: 'Steam 登录失效，请重新登录', STEAM_GUARD_REQUIRED: 'Steam Guard 验证失败', DOWNLOAD_TIMEOUT: 'SteamCMD 操作超时', INVALID_LOGIN: '用户名或密码格式无效' };
   return messages[code] || sanitizeError(error).message;
+}
+export function steamIdFromOutput(output: string): string | null {
+  const account = /\[U:1:(\d+)\]/.exec(output)?.[1];
+  if (account) return (76561197960265728n + BigInt(account)).toString();
+  return /\b(7656119\d{10})\b/.exec(output)?.[1] || null;
 }

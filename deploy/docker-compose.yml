@@ -29,6 +29,13 @@ services:
       STEAM_ROOT: /wallpaper-manager/steam-data
       STEAM_WEB_API_KEY: ${STEAM_WEB_API_KEY:-}
       MAX_QUEUE_LENGTH: ${MAX_QUEUE_LENGTH:-20}
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,web,api,worker,redis}
+      http_proxy: ${HTTP_PROXY:-}
+      https_proxy: ${HTTPS_PROXY:-}
+      no_proxy: ${NO_PROXY:-localhost,127.0.0.1,web,api,worker,redis}
+    extra_hosts: ["host.docker.internal:host-gateway"]
     volumes:
       - ${WALLPAPER_DATA_ROOT:-/srv/wallpaper-manager}/app-data:/app-data
       - ${WALLPAPER_DATA_ROOT:-/srv/wallpaper-manager}/steam-data:/wallpaper-manager/steam-data:ro
@@ -50,6 +57,13 @@ services:
       TRASH_DIR: /wallpaper-manager/trash
       STEAM_CONFIG_DIR: /steam-config
       STEAMCMD_BIN: /opt/steamcmd/steamcmd.sh
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,web,api,worker,redis}
+      http_proxy: ${HTTP_PROXY:-}
+      https_proxy: ${HTTPS_PROXY:-}
+      no_proxy: ${NO_PROXY:-localhost,127.0.0.1,web,api,worker,redis}
+    extra_hosts: ["host.docker.internal:host-gateway"]
     volumes:
       - ${WALLPAPER_DATA_ROOT:-/srv/wallpaper-manager}/app-data:/app-data
       - ${WALLPAPER_DATA_ROOT:-/srv/wallpaper-manager}:/wallpaper-manager

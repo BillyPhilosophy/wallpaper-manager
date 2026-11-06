@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { PreviewDescriptor, WallpaperType } from '@wallpaper-manager/contracts';
+import type { ContentRating, PreviewDescriptor, WallpaperType } from '@wallpaper-manager/contracts';
 
 export class WallpaperFileError extends Error {
   constructor(public code: string, message: string) { super(message); this.name = 'WallpaperFileError'; }
@@ -24,8 +24,12 @@ export function stagingWorkshopDirectory(stagingDir: string, jobId: string, work
   return path.join(stagingDir, safeJobId(jobId), 'steamapps', 'workshop', 'content', '431960', assertWorkshopId(workshopId));
 }
 
-export interface ProjectInfo { type: WallpaperType; entry: string | null; project: Record<string, unknown> }
+export interface ProjectInfo { type: WallpaperType; contentRating: ContentRating; entry: string | null; project: Record<string, unknown> }
 function stringValue(value: unknown): string | undefined { return typeof value === 'string' && value.length ? value : undefined; }
+export function contentRating(value: unknown): ContentRating {
+  const rating = stringValue(value)?.toLowerCase();
+  return rating === 'g' || rating === 'everyone' ? 'everyone' : rating === 'pg13' ? 'pg13' : rating === 'r' || rating === 'mature' ? 'mature' : 'unrated';
+}
 export async function inspectWallpaper(directory: string): Promise<ProjectInfo> {
   const raw = await fs.readFile(path.join(directory, 'project.json'), 'utf8').catch((error: NodeJS.ErrnoException) => {
     if (error.code === 'ENOENT') throw new WallpaperFileError('INVALID_PROJECT', '缺少 project.json');
@@ -35,19 +39,27 @@ export async function inspectWallpaper(directory: string): Promise<ProjectInfo> 
   try { project = JSON.parse(raw); } catch { throw new WallpaperFileError('INVALID_PROJECT', 'project.json 不是合法 JSON'); }
   if (!project || Array.isArray(project) || typeof project !== 'object') throw new WallpaperFileError('INVALID_PROJECT', 'project.json 格式无效');
   const type = stringValue(project.type)?.toLowerCase();
+  const rating = contentRating(project.contentrating);
   const files = await fs.readdir(directory);
   if (type === 'application') throw new WallpaperFileError('UNSUPPORTED_TYPE', '不支持 Application／EXE 壁纸');
   if (type === 'video') {
     const entry = stringValue(project.file);
     if (!entry) throw new WallpaperFileError('RESOURCE_MISSING', '视频入口缺失');
-    return { type: 'video', entry: safeRelativePath(entry), project };
+    return { type: 'video', contentRating: rating, entry: safeRelativePath(entry), project };
   }
   if (type === 'web') {
     const entry = stringValue(project.file);
     if (!entry || !/\.html?$/i.test(entry)) throw new WallpaperFileError('RESOURCE_MISSING', '网页入口缺失');
     const safe = safeRelativePath(entry);
     if (!(await isRegularFile(path.join(directory, safe)))) throw new WallpaperFileError('RESOURCE_MISSING', '网页入口文件不存在');
-    return { type: 'web', entry: safe, project };
+    return { type: 'web', contentRating: rating, entry: safe, project };
+  }
+  if (type === 'image') {
+    const entry = stringValue(project.file);
+    if (!entry || !/\.(png|jpe?g|gif|webp|bmp)$/i.test(entry)) throw new WallpaperFileError('RESOURCE_MISSING', '图片入口缺失');
+    const safe = safeRelativePath(entry);
+    if (!(await isRegularFile(path.join(directory, safe)))) throw new WallpaperFileError('RESOURCE_MISSING', '图片入口文件不存在');
+    return { type: 'image', contentRating: rating, entry: safe, project };
   }
   if (type === 'scene') {
     const declared = stringValue(project.file);
@@ -59,9 +71,9 @@ export async function inspectWallpaper(directory: string): Promise<ProjectInfo> 
     }
     if (!existing.length) throw new WallpaperFileError('RESOURCE_MISSING', 'Scene 入口不存在');
     const preferred = existing.find((f) => f === 'scene.pkg') ?? existing.find((f) => f === 'scene.json') ?? existing[0];
-    return { type: 'scene', entry: preferred, project };
+    return { type: 'scene', contentRating: rating, entry: preferred, project };
   }
-  return { type: type === 'scene' || type === 'web' || type === 'video' || type === 'application' ? type : 'unknown', entry: null, project };
+  return { type: 'unknown', contentRating: rating, entry: null, project };
 }
 async function isRegularFile(file: string): Promise<boolean> { try { return (await fs.lstat(file)).isFile() && !(await fs.lstat(file)).isSymbolicLink(); } catch { return false; } }
 

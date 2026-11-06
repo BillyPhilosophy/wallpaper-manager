@@ -7,6 +7,8 @@
 ## 项目能做什么
 
 - 使用 Steam 官方接口搜索和浏览创意工坊壁纸。
+- 同步当前 Steam 账号的订阅列表；同步只加入网站，不会自动批量下载，取消订阅也不会删除本地文件。
+- 按内容分级和类型多选筛选本地壁纸；下载后以 `project.json` 中的 `contentrating` 和 `type` 为准。
 - 查看官方图片、动图、视频及完整元数据。
 - 配置 SteamCMD 登录并处理 Steam Guard。
 - 下载、取消、重试和删除壁纸，展示真实任务阶段，不伪造下载百分比。
@@ -72,6 +74,18 @@ WALLPAPER_DATA_ROOT=/mnt/wallpaper-disk/wallpaper-manager
 启动时，Compose 的一次性 `init` 服务会自动创建所有数据目录并设置权限，无需手动执行建目录命令。`staging`、`steam-data` 和 `trash` 位于同一数据根目录，必须保持在同一文件系统。容器使用 UID/GID `1000:1000`，请确保 DSH 用户能够读取 `steam-data`，不要开放 `0777`。
 
 如果数据目录位于外接硬盘，启动前必须确认硬盘已经挂载。容器无法可靠检测宿主机是否漏挂硬盘；否则 Docker 可能在系统盘创建同名目录。
+
+### 可选：通过宿主机代理访问 Steam
+
+如果 Steam 直连不稳定，且宿主机已有监听 `0.0.0.0:7890` 的 HTTP／混合代理，在 `deploy/.env` 中取消注释并设置：
+
+```env
+HTTP_PROXY=http://host.docker.internal:7890
+HTTPS_PROXY=http://host.docker.internal:7890
+NO_PROXY=localhost,127.0.0.1,web,api,worker,redis
+```
+
+Compose 会将 `host.docker.internal` 映射到宿主机网关。代理同时作用于工坊搜索、订阅同步和 SteamCMD 登录／下载；留空 `HTTP_PROXY` 和 `HTTPS_PROXY` 则保持直连。`NO_PROXY` 用于保证容器内部通信不经过代理。修改后需要重建 API 和 Worker 容器。
 
 ### 3. 启动服务
 
@@ -207,9 +221,9 @@ tests/                 fixtures、集成测试和 E2E 测试
 
 ## 验收边界
 
-本项目不承诺同步 Steam 订阅，不下载或运行 Application／EXE，不在树莓派上进行 WebGL 渲染，也不保证所有 Scene／Web 壁纸都能 100% 还原 Wallpaper Engine。
+本项目不下载或运行 Application／EXE，不在 ARM64 设备上进行 WebGL 渲染，也不保证所有 Scene／Web 壁纸都能 100% 还原 Wallpaper Engine。订阅同步不是自动批量下载，也不承诺同步收藏、点赞或 Wallpaper Engine 播放配置。
 
-真实 Steam 登录、Guard、工坊下载、Scene 渲染，以及树莓派与 DSH 的完整联动仍需在目标设备验收。更详细的说明见：
+真实 Steam 登录、Guard、订阅同步、工坊下载、Scene 渲染，以及树莓派与 DSH 的完整联动仍需在目标设备验收。更详细的说明见：
 
 - `docs/deployment.md`
 - `docs/dsh-integration.md`

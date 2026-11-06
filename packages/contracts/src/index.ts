@@ -1,8 +1,10 @@
-export const WALLPAPER_TYPES = ['scene', 'web', 'video', 'application', 'unknown'] as const;
+export const WALLPAPER_TYPES = ['scene', 'web', 'video', 'image', 'application', 'unknown'] as const;
+export const CONTENT_RATINGS = ['everyone', 'pg13', 'mature', 'unrated'] as const;
 export const WALLPAPER_STATUSES = ['not_downloaded', 'queued', 'downloading', 'verifying', 'publishing', 'downloaded', 'deleting'] as const;
 export const DOWNLOAD_STATUSES = ['queued', 'downloading', 'verifying', 'publishing', 'succeeded', 'failed', 'cancelled'] as const;
 export const ACTIVE_DOWNLOAD_STATUSES = ['queued', 'downloading', 'verifying', 'publishing'] as const;
 export type WallpaperType = typeof WALLPAPER_TYPES[number];
+export type ContentRating = typeof CONTENT_RATINGS[number];
 export type WallpaperStatus = typeof WALLPAPER_STATUSES[number];
 export type DownloadStatus = typeof DOWNLOAD_STATUSES[number];
 export type SteamAuthStatus = 'authenticated' | 'auth_required' | 'guard_required' | 'error';
@@ -11,6 +13,7 @@ export type ErrorCode = 'STEAM_AUTH_REQUIRED' | 'STEAM_GUARD_REQUIRED' | 'STEAM_
 export interface ApiError { code: ErrorCode | string; message: string; requestId: string }
 export interface Wallpaper {
   workshopId: string; title: string; description: string | null; type: WallpaperType;
+  contentRating: ContentRating; subscribed: boolean;
   officialPreviewUrl: string | null; metadataJson: unknown; localRelativePath: string | null;
   status: WallpaperStatus; fileSizeBytes: string | null; lastErrorCode: string | null;
   lastErrorMessage: string | null; downloadedAt: string | null; createdAt: string; updatedAt: string;
@@ -22,6 +25,7 @@ export interface DownloadJob {
 }
 export interface WorkshopItem {
   workshopId: string; title: string; description: string | null; type: WallpaperType;
+  contentRating: ContentRating; subscribed: boolean;
   officialPreviewUrl: string | null; previewContentType: string | null;
   metadataJson: Record<string, unknown>; localStatus: WallpaperStatus;
 }

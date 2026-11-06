@@ -16,7 +16,7 @@ class FakeSteamProcess extends EventEmitter {
   killed = false;
   kill = vi.fn();
   stdin = { write: vi.fn((input: string) => {
-    const output = input.startsWith('login ') ? 'password:' : input === 'secret\n' ? 'Steam Guard code:' : input === 'ABCDE\n' ? 'Logging in user test OK\nSteam> ' : '';
+    const output = input.startsWith('login ') ? 'password:' : input === 'secret\n' ? 'Steam Guard code:' : input === 'ABCDE\n' ? 'Logging in user test [U:1:123] OK\nSteam> ' : '';
     queueMicrotask(() => this.stdout.emit('data', Buffer.from(output)));
   }) };
 }
@@ -37,6 +37,7 @@ describe('SteamCMD authentication', () => {
       expect(steam.status).toBe('guard_required');
       await steam.guard('ABCDE');
       expect(steam.status).toBe('authenticated');
+      expect(steam.steamId).toBe('76561197960265851');
       expect(child.stdin.write).toHaveBeenNthCalledWith(3, 'ABCDE\n');
     } finally {
       await steam.close();
