@@ -1,4 +1,5 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Injectable, Logger, Module, OnModuleDestroy } from '@nestjs/common';
+import { SteamNetworkController } from '@wallpaper-manager/steam-network';
 import { randomUUID } from 'node:crypto';
 import type { Request, Response } from 'express';
 import { Queue } from 'bullmq';
@@ -34,6 +35,7 @@ export function serializeJob(item: any) { const { activeWorkshopId: _internal, .
 @Injectable()
 export class Infrastructure implements OnModuleDestroy {
   readonly db: PrismaClient = prisma;
+  readonly steamNetwork = new SteamNetworkController();
   readonly redis = new IORedis(process.env.REDIS_URL || 'redis://127.0.0.1:6379', { maxRetriesPerRequest: null, lazyConnect: true });
   readonly downloads = new Queue('wallpaper-downloads', { connection: this.redis });
   readonly deletions = new Queue('wallpaper-deletions', { connection: this.redis });

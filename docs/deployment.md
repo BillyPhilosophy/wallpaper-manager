@@ -19,6 +19,8 @@ WALLPAPER_DATA_ROOT=/srv/wallpaper-manager
 STEAM_WEB_API_KEY=
 # STEAMGUARD_CLI_PASSKEY_FILE=/steam-config/steamguard/passkey
 MAX_QUEUE_LENGTH=20
+# STEAM_NETWORK_MODE=auto
+# STEAM_PROXY_URL=http://host.docker.internal:7890
 # HTTP_PROXY=http://host.docker.internal:7890
 # HTTPS_PROXY=http://host.docker.internal:7890
 NO_PROXY=localhost,127.0.0.1,web,api,worker,redis
@@ -34,7 +36,7 @@ Compose 的一次性 `init` 服务会自动创建 `app-data`、`staging`、`stea
 
 如果数据根目录位于外接硬盘，启动前必须确认硬盘已挂载。容器中的初始化服务无法可靠检测宿主机是否漏挂硬盘；否则 Docker 可能在系统盘创建同名目录并继续写入。
 
-如需通过宿主机代理访问 Steam，设置 `HTTP_PROXY` 和 `HTTPS_PROXY`，例如 `http://host.docker.internal:7890`。Compose 会把该主机名映射到 Docker 宿主机网关，代理服务应监听 `0.0.0.0` 并允许容器网段访问。API 的搜索和订阅同步使用代理；Worker 的 DepotDownloader 与 steamguard-cli 会继承代理变量，但 Steam 连接和 CDN 下载的代理行为仍需在目标网络实测。两个变量留空时直连。保留 `NO_PROXY` 中的内部服务名，避免内部请求进入代理。修改后重建 API 和 Worker 容器。
+如需通过宿主机代理访问 Steam，设置 `STEAM_PROXY_URL`（也可使用 `HTTP_PROXY`/`HTTPS_PROXY`），例如 `http://host.docker.internal:7890`。Compose 会把该主机名映射到 Docker 宿主机网关，代理服务应监听 `0.0.0.0` 并允许容器网段访问。`STEAM_NETWORK_MODE` 支持 `direct`、`proxy`、`auto`：配置代理时默认 `proxy`，未配置时默认 `direct`。`auto` 先进行 5 秒直连探测，成功保持 15 分钟，只在网络错误时切代理，HTTP 状态和认证错误不会触发切换。保留 `NO_PROXY` 中的内部服务名，避免内部请求进入代理。修改后重建 API 和 Worker 容器。
 
 ## 配置与启动
 

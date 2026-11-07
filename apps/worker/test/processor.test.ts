@@ -23,8 +23,9 @@ describe('DepotDownloader processing', () => {
     const steam: SteamClient = {
       status: 'auth_required', steamId: null, accountName: 'test',
       initialize: vi.fn(), login: vi.fn(), guard: vi.fn(), logout: vi.fn(), close: vi.fn(),
-      download: vi.fn(async (target: string) => {
+      download: vi.fn(async (target: string, _workshopId: string, _cancel: () => Promise<boolean>, onProgress?: (progress: any) => void) => {
         downloadTarget = target;
+        onProgress?.({ downloadedBytes: '8', totalBytes: '8', networkBytes: '8', bytesPerSecond: '4', percent: 100, updatedAt: new Date().toISOString() });
         await mkdir(target, { recursive: true });
         await writeFile(path.join(target, 'project.json'), JSON.stringify({ title: 'Scene', type: 'scene', file: 'scene.pkg' }));
         await writeFile(path.join(target, 'scene.pkg'), 'fixture');
@@ -34,8 +35,10 @@ describe('DepotDownloader processing', () => {
     const wallpaper = { updateMany: vi.fn().mockResolvedValue({ count: 1 }), update: vi.fn().mockResolvedValue({}), findUnique: vi.fn().mockResolvedValue({ downloadedAt: null }) };
     const db = { downloadJob, wallpaper, $transaction: vi.fn((callback) => callback({ downloadJob, wallpaper })) };
     const redis = { exists: vi.fn().mockResolvedValue(0) };
+    const processor = new DownloadProcessor(steam, redis as any, stagingDir, steamRoot, db as any);
     try {
-      await new DownloadProcessor(steam, redis as any, stagingDir, steamRoot, db as any).process({ data: { jobId, workshopId: '123' } } as any);
+      await processor.process({ data: { jobId, workshopId: '123' } } as any);
+      expect(processor.getProgress()).toEqual([]);
       expect(downloadTarget).toBe(stagingWorkshopDirectory(stagingDir, jobId, '123'));
       const published = path.join(steamRoot, 'steamapps', 'workshop', 'content', '431960', '123');
       expect(JSON.parse(await readFile(path.join(published, 'project.json'), 'utf8')).title).toBe('Scene');

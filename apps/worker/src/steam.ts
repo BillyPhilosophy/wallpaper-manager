@@ -1,5 +1,8 @@
-export type AuthStatus = 'authenticated' | 'auth_required' | 'guard_required' | 'qr_required' | 'error';
+import type { DownloadProgress } from '@wallpaper-manager/contracts';
+
+export type AuthStatus = 'authenticated' | 'auth_required' | 'guard_required' | 'email_required' | 'confirmation_required' | 'qr_required' | 'error';
 export interface SteamQrLoginState { status: AuthStatus; qrCode: string | null; updatedAt: string | null }
+export type ProgressListener = (progress: DownloadProgress) => void;
 
 export interface SteamClient {
   readonly status: AuthStatus;
@@ -11,6 +14,6 @@ export interface SteamClient {
   qrLoginState(): SteamQrLoginState;
   guard(code: string): Promise<void>;
   logout(): Promise<void>;
-  download(target: string, workshopId: string, isCancelled: () => Promise<boolean>): Promise<void>;
+  download(target: string, workshopId: string, isCancelled: () => Promise<boolean>, onProgress?: ProgressListener): Promise<void>;
   close(): Promise<void>;
 }

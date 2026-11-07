@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { SteamNetworkController } from '@wallpaper-manager/steam-network';
 
 interface ManifestEntry {
   account_name?: unknown;
@@ -8,7 +9,7 @@ interface ManifestEntry {
 }
 
 export class SteamGuardClient {
-  constructor(private readonly binary: string, private readonly maFilesDir: string, private readonly passkeyFile?: string) {}
+  constructor(private readonly binary: string, private readonly maFilesDir: string, private readonly passkeyFile?: string, private readonly network = new SteamNetworkController()) {}
 
   async steamId(username: string): Promise<string | null> {
     const entry = await this.entry(username);
@@ -22,7 +23,7 @@ export class SteamGuardClient {
     const accountName = typeof entry?.account_name === 'string' ? entry.account_name : '';
     if (!accountName) throw new Error('STEAM_GUARD_REQUIRED');
 
-    const env = { ...process.env };
+    const env = await this.network.processEnv(process.env);
     if (this.passkeyFile) {
       const passkey = (await readFile(this.passkeyFile, 'utf8').catch(() => '')).replace(/\r?\n$/, '');
       if (passkey) env.STEAMGUARD_CLI_PASSKEY = passkey;

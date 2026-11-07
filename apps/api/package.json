@@ -12,6 +12,7 @@
     "@nestjs/core": "^11.1.9",
     "@nestjs/platform-express": "^11.1.9",
     "@wallpaper-manager/config": "workspace:*",
+    "@wallpaper-manager/steam-network": "workspace:*",
     "@wallpaper-manager/contracts": "workspace:*",
     "@wallpaper-manager/database": "workspace:*",
     "@wallpaper-manager/wallpaper-files": "workspace:*",

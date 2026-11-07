@@ -7,11 +7,11 @@
 ## 项目能做什么
 
 - 使用 Steam 官方接口搜索和浏览创意工坊壁纸。
-- 同步当前 Steam 账号的订阅列表；同步只加入网站，不会自动批量下载，取消订阅也不会删除本地文件。
+- 使用 SteamID64 同步订阅列表，已知 SteamID 时无需登录；同步只加入网站，不会自动批量下载，取消订阅也不会删除本地文件。
 - 按内容分级和类型多选筛选本地壁纸；下载后以 `project.json` 中的 `contentrating` 和 `type` 为准。
 - 查看官方图片、动图、视频及完整元数据。
 - 默认使用 Steam 手机 App 扫码登录，也支持账密登录、steamguard-cli 自动令牌和手工 Guard。
-- 下载、取消、重试和删除壁纸，展示真实任务阶段，不伪造下载百分比。
+- 下载、取消、重试和删除壁纸，展示真实任务阶段、字节占比和平均下载速率；没有可靠数据时不伪造百分比。
 - 使用固定版本的 `webwallgl@3.0.0` 在线预览已下载的 Scene／Web 壁纸。
 - 与 DSH 共用同一份原始工坊文件，下载后即可在 DSH 壁纸库中使用。
 - 通过暂存目录、资源校验和原子发布，避免网站或 DSH 读取半成品。
@@ -85,7 +85,7 @@ HTTPS_PROXY=http://host.docker.internal:7890
 NO_PROXY=localhost,127.0.0.1,web,api,worker,redis
 ```
 
-Compose 会将 `host.docker.internal` 映射到宿主机网关。API 搜索和订阅同步使用代理；DepotDownloader 与 steamguard-cli 也会继承代理变量，但 Steam 连接和 CDN 下载仍须在目标网络实测。留空 `HTTP_PROXY` 和 `HTTPS_PROXY` 则保持直连。`NO_PROXY` 用于保证容器内部通信不经过代理。修改后需要重建 API 和 Worker 容器。
+Compose 会将 `host.docker.internal` 映射到宿主机网关。`STEAM_NETWORK_MODE` 支持 `direct`、`proxy`、`auto`：配置代理时默认 `proxy`，未配置时默认 `direct`。`auto` 先进行 5 秒直连探测，成功保持 15 分钟，只在网络错误时切代理；HTTP 状态和认证错误不会触发切换。可用 `STEAM_PROXY_URL` 或 `HTTP_PROXY`/`HTTPS_PROXY` 指定代理，`NO_PROXY` 用于保证容器内部通信不经过代理。修改后需要重建 API 和 Worker 容器。
 
 ### 3. 启动服务
 
@@ -134,7 +134,7 @@ cp deploy/.env.example deploy/.env
 docker compose -f deploy/docker-compose.yml up -d --build
 ```
 
-Worker 镜像内置固定版本的原生 ARM64 DepotDownloader 和 steamguard-cli。镜像构建成功不代表 Steam 已完成实机验收，仍需测试真实登录、自动 Guard 和下载。配置方法见 `docs/steam-login.md`。
+Worker 镜像内置固定版本的原生 ARM64 DepotDownloader 和 steamguard-cli。DepotDownloader 从固定源码构建，仅通过 `deploy/depotdownloader-progress.patch` 增加真实字节进度输出，不改变下载算法。镜像构建成功不代表 Steam 已完成实机验收，仍需测试真实登录、自动 Guard 和下载。配置方法见 `docs/steam-login.md`。
 
 ## DSH 接入
 

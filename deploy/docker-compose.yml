@@ -31,6 +31,8 @@ services:
       MAX_QUEUE_LENGTH: ${MAX_QUEUE_LENGTH:-20}
       HTTP_PROXY: ${HTTP_PROXY:-}
       HTTPS_PROXY: ${HTTPS_PROXY:-}
+      STEAM_NETWORK_MODE: ${STEAM_NETWORK_MODE:-}
+      STEAM_PROXY_URL: ${STEAM_PROXY_URL:-}
       NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,web,api,worker,redis}
       http_proxy: ${HTTP_PROXY:-}
       https_proxy: ${HTTPS_PROXY:-}
@@ -64,6 +66,8 @@ services:
       STEAMGUARD_CLI_PASSKEY_FILE: ${STEAMGUARD_CLI_PASSKEY_FILE:-}
       HTTP_PROXY: ${HTTP_PROXY:-}
       HTTPS_PROXY: ${HTTPS_PROXY:-}
+      STEAM_NETWORK_MODE: ${STEAM_NETWORK_MODE:-}
+      STEAM_PROXY_URL: ${STEAM_PROXY_URL:-}
       NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,web,api,worker,redis}
       http_proxy: ${HTTP_PROXY:-}
       https_proxy: ${HTTPS_PROXY:-}

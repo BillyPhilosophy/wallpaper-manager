@@ -1,12 +1,16 @@
 import { createServer, Server } from 'node:http';
+import type { DownloadProgress } from '@wallpaper-manager/contracts';
 import type { SteamClient } from './steam';
 import { safeAuthMessage } from './depotdownloader';
 
-export function startAuthServer(steam: SteamClient, port = 9780): Server {
+interface ProgressSource { getProgress(): (DownloadProgress & { jobId: string })[] }
+
+export function startAuthServer(steam: SteamClient, port = 9780, progress?: ProgressSource): Server {
   return createServer((request, response) => {
     response.setHeader('content-type', 'application/json; charset=utf-8');
     if (request.method === 'GET' && request.url === '/health') { response.writeHead(200).end(JSON.stringify({ status: 'ok' })); return; }
     if (request.method === 'GET' && request.url === '/auth/qr') { response.writeHead(200).end(JSON.stringify(steam.qrLoginState())); return; }
+    if (request.method === 'GET' && request.url === '/downloads/progress') { response.writeHead(200).end(JSON.stringify(progress?.getProgress() || [])); return; }
     if (request.method !== 'POST' || !['/auth/login', '/auth/guard', '/auth/logout', '/auth/qr/start'].includes(request.url || '')) { response.writeHead(404).end(JSON.stringify({ message: 'Not found' })); return; }
     let raw = ''; let aborted = false;
     request.on('data', (chunk: Buffer) => { raw += chunk.toString(); if (raw.length > 4096) { aborted = true; response.writeHead(413).end(JSON.stringify({ message: '请求过大' })); request.destroy(); } });

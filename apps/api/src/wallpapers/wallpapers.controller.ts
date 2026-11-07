@@ -3,11 +3,22 @@ import { randomUUID } from 'node:crypto';
 import { createReadStream, promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { Request, Response } from 'express';
-import { ACTIVE_DOWNLOAD_STATUSES, CONTENT_RATINGS, WALLPAPER_STATUSES, WALLPAPER_TYPES } from '@wallpaper-manager/contracts';
+import { ACTIVE_DOWNLOAD_STATUSES, CONTENT_RATINGS, WALLPAPER_STATUSES, WALLPAPER_TYPES, type DownloadProgress } from '@wallpaper-manager/contracts';
 import { assertWorkshopId, previewDescriptor, resolveResourcePath, safeJobId, wallpaperDirectory } from '@wallpaper-manager/wallpaper-files';
 import { Infrastructure, serializeJob, serializeWallpaper } from '../common';
 
 const mime: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.mp4': 'video/mp4', '.webm': 'video/webm', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.pkg': 'application/octet-stream', '.tex': 'application/octet-stream', '.wasm': 'application/wasm' };
+
+async function workerDownloadProgress(): Promise<Map<string, DownloadProgress>> {
+  try {
+    const response = await fetch('http://worker:9780/downloads/progress', { signal: AbortSignal.timeout(3000) });
+    if (!response.ok) return new Map();
+    const items = await response.json() as (DownloadProgress & { jobId: string })[];
+    return new Map(items.map((item) => [item.jobId, { downloadedBytes: item.downloadedBytes, totalBytes: item.totalBytes, networkBytes: item.networkBytes, bytesPerSecond: item.bytesPerSecond, percent: item.percent, updatedAt: item.updatedAt }]));
+  } catch {
+    return new Map();
+  }
+}
 
 @Controller()
 export class WallpapersController {
@@ -45,7 +56,8 @@ export class WallpapersController {
   async jobs(@Query('status') status = '', @Query('page') value = '1', @Query('pageSize') sizeValue = '20') {
     const page = positive(value, 1); const pageSize = Math.min(positive(sizeValue, 20), 100); const where = status ? { status } : {};
     const [items, total] = await Promise.all([this.infra.db.downloadJob.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (page - 1) * pageSize, take: pageSize }), this.infra.db.downloadJob.count({ where })]);
-    return { items: items.map(serializeJob), page, pageSize, total };
+    const progress = items.some((item) => ACTIVE_DOWNLOAD_STATUSES.includes(item.status as any)) ? await workerDownloadProgress() : new Map<string, DownloadProgress>();
+    return { items: items.map((job) => ({ ...serializeJob(job), ...(progress.has(job.id) ? { progress: progress.get(job.id) } : {}) })), page, pageSize, total };
   }
   @Get('downloads/:jobId')
   async job(@Param('jobId') id: string) { safeJobId(id); const job = await this.infra.db.downloadJob.findUnique({ where: { id } }); if (!job) throw new NotFoundException('任务不存在'); return serializeJob(job); }

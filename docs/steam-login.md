@@ -4,7 +4,7 @@ Worker 使用原生 ARM64／AMD64 的 DepotDownloader 下载工坊内容，不�
 
 也可使用账号密码登录。密码只存在于当前浏览器请求、API 到 Worker 的内部 HTTP 请求及 DepotDownloader 受控 stdin 中，不进入 BullMQ payload、SQLite、命令行参数或应用日志。内部端口 `9780` 不对宿主机发布。
 
-账密登录使用 `-no-mobile` 将手机确认切换为手机令牌码输入。配置 steamguard-cli 后，Worker 自动生成并提交令牌码；无法自动产码时仍可在设置页手工输入 Guard。邮件 Guard 只能手工输入。
+账密登录按 Steam 上游实际要求处理：需要手机确认时只在 Steam App 中批准，不要求输入验证码；需要手机令牌码时由 steamguard-cli 自动产码，失败时可手工输入；邮箱验证码只能手工输入。不会用 steamguard-cli 盲目批准所有登录请求。
 
 ## 配置 steamguard-cli
 
@@ -31,7 +31,7 @@ Worker 只在启动 steamguard-cli 时通过环境变量传递 passkey，不把�
 
 首次登录成功后，DepotDownloader 将持久 refresh token 保存在 `steam-config/depotdownloader` 的 .NET IsolatedStorage 中。后续下载和 Worker 重启会使用该会话，不保存账号密码；会话被撤销或过期后会转为 `auth_required`，不会无限重试认证。
 
-Worker 从 steamguard-cli 的 `manifest.json` 读取 SteamID64。未配置自动令牌时，可在登录表单手工填写 SteamID64，用于订阅同步。账号名和 SteamID64 属于非秘密状态，会保存在 SQLite；密码和一次性 Guard 码不会保存。
+订阅同步只依赖 Web API Key 和 SteamID64，不需要 DepotDownloader 登录会话。可在“订阅同步”卡片直接填写 SteamID64，点击同步时会保存并复用；Worker 也可从 steamguard-cli 的 `manifest.json` 读取。账号名和 SteamID64 属于非秘密状态，会保存在 SQLite；密码和一次性 Guard 码不会保存。
 
 “退出 Steam 会话”会终止当前 DepotDownloader 进程并删除本地 refresh token，不会删除 steamguard-cli maFiles 或解除认证器。如需彻底撤销服务器端授权，还应在 Steam 账号的授权设备管理中撤销对应会话。
 

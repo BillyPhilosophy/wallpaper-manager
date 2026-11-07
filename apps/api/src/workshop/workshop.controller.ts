@@ -1,6 +1,7 @@
-import { ConflictException, Controller, Get, HttpException, Param, Post, Query, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, Body, ConflictException, Controller, Get, HttpException, Param, Post, Query, ServiceUnavailableException } from '@nestjs/common';
 import { assertWorkshopId, contentRating } from '@wallpaper-manager/wallpaper-files';
 import type { ContentRating, WallpaperType, WorkshopItem } from '@wallpaper-manager/contracts';
+import type { SteamNetworkController } from '@wallpaper-manager/steam-network';
 import { Infrastructure } from '../common';
 
 const cache = new Map<string, { expires: number; value: unknown }>();
@@ -22,12 +23,12 @@ async function cached<T>(key: string, load: () => Promise<T>): Promise<T> {
   const hit = cache.get(key); if (hit && hit.expires > Date.now()) return hit.value as T;
   const value = await load(); cache.set(key, { value, expires: Date.now() + 60_000 }); if (cache.size > 200) cache.delete(cache.keys().next().value!); return value;
 }
-async function steamFetch(url: string, init: RequestInit = {}): Promise<any> {
+async function steamFetch(network: SteamNetworkController | undefined, url: string, init: RequestInit = {}): Promise<any> {
   while (recentRequests.length && recentRequests[0] <= Date.now() - 1000) recentRequests.shift();
   if (recentRequests.length >= 4) throw new HttpException({ code: 'STEAM_RATE_LIMITED', message: '搜索请求过于频繁' }, 429);
   recentRequests.push(Date.now());
   let response: Response;
-  try { response = await fetch(url, { ...init, signal: AbortSignal.timeout(15000), headers: { 'User-Agent': 'WallpaperManager/1.0', ...init.headers } }); }
+  try { response = network ? await network.fetchSteam(url, { ...init, headers: { 'User-Agent': 'WallpaperManager/1.0', ...init.headers } }) : await fetch(url, { ...init, signal: AbortSignal.timeout(15000), headers: { 'User-Agent': 'WallpaperManager/1.0', ...init.headers } }); }
   catch { console.warn('[steam-api] network request failed or timed out'); throw new ServiceUnavailableException({ code: 'STEAM_API_UNAVAILABLE', message: '无法连接 Steam 官方接口' }); }
   if (response.status === 429) { console.warn('[steam-api] upstream status=429'); throw new HttpException({ code: 'STEAM_RATE_LIMITED', message: 'Steam 请求限流，请稍后重试' }, 429); }
   if (!response.ok) { console.warn(`[steam-api] upstream status=${response.status}`); throw new ServiceUnavailableException({ code: 'STEAM_API_UNAVAILABLE', message: 'Steam 官方接口暂不可用' }); }
@@ -41,7 +42,7 @@ export class WorkshopController {
     const pageSize = Math.min(Math.max(Number(size) || 20, 1), 50); const key = process.env.STEAM_WEB_API_KEY;
     if (!key) throw new ServiceUnavailableException({ code: 'STEAM_API_UNAVAILABLE', message: '未配置 Steam Web API Key' });
     const params = new URLSearchParams({ key, appid: '431960', query_type: '0', page: '1', numperpage: String(pageSize), cursor: cursor || '*', return_metadata: 'true', return_short_description: 'true', return_tags: 'true', search_text: q.slice(0, 200) });
-    const body = await cached(`search:${params}`, () => steamFetch(`https://api.steampowered.com/IPublishedFileService/QueryFiles/v1/?${params}`));
+    const body = await cached(`search:${params}`, () => steamFetch(this.infra.steamNetwork, `https://api.steampowered.com/IPublishedFileService/QueryFiles/v1/?${params}`));
     const details = body.response?.publishedfiledetails || []; const ids = details.map((entry: any) => String(entry.publishedfileid));
     const local = await this.infra.db.wallpaper.findMany({ where: { workshopId: { in: ids } } }); const states = new Map(local.map((entry) => [entry.workshopId, entry]));
     const items = details.map((entry: any) => item(entry, states.get(String(entry.publishedfileid))));
@@ -51,7 +52,7 @@ export class WorkshopController {
   @Get('items/:workshopId')
   async detail(@Param('workshopId') id: string) {
     assertWorkshopId(id);
-    const body = await cached(`detail:${id}`, () => steamFetch('https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ itemcount: '1', 'publishedfileids[0]': id }) }));
+    const body = await cached(`detail:${id}`, () => steamFetch(this.infra.steamNetwork, 'https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ itemcount: '1', 'publishedfileids[0]': id }) }));
     const detail = body.response?.publishedfiledetails?.[0];
     if (!detail || detail.result !== 1 && !detail.publishedfileid) throw new ServiceUnavailableException({ code: 'WORKSHOP_ITEM_NOT_FOUND', message: '未找到工坊项目' });
     const local = await this.infra.db.wallpaper.findUnique({ where: { workshopId: id } });
@@ -62,20 +63,25 @@ export class WorkshopController {
   @Get('subscriptions/sync')
   syncStatus() { return subscriptionSync; }
   @Post('subscriptions/sync')
-  async syncSubscriptions() {
+  async syncSubscriptions(@Body() body?: { steamId?: unknown }) {
     if (subscriptionSync.status === 'running') return subscriptionSync;
+    const supplied = typeof body?.steamId === 'string' ? body.steamId.trim() : body?.steamId;
+    if (supplied !== undefined && supplied !== '' && (typeof supplied !== 'string' || !/^7656119\d{10}$/.test(supplied))) throw new BadRequestException({ code: 'BAD_REQUEST', message: 'SteamID64 格式无效' });
     const key = process.env.STEAM_WEB_API_KEY;
     if (!key) throw new ServiceUnavailableException({ code: 'STEAM_API_UNAVAILABLE', message: '未配置 Steam Web API Key' });
     const auth = await this.infra.db.steamAuthState.findUnique({ where: { id: 1 } });
-    if (!auth?.steamId) throw new ConflictException({ code: 'STEAM_AUTH_REQUIRED', message: '需要先完成 Steam 登录以获取 SteamID' });
+    const requestedSteamId = typeof supplied === 'string' && supplied ? supplied : undefined;
+    const steamId = requestedSteamId || auth?.steamId;
+    if (!steamId) throw new ConflictException({ code: 'STEAM_ID_REQUIRED', message: '请填写 SteamID64 后同步' });
+    if (requestedSteamId && requestedSteamId !== auth?.steamId) await this.infra.db.steamAuthState.upsert({ where: { id: 1 }, update: { steamId: requestedSteamId }, create: { id: 1, steamId: requestedSteamId } });
     subscriptionSync = { status: 'running', total: 0, synced: 0, message: null, updatedAt: new Date().toISOString() };
     console.log('[subscriptions] sync started');
-    void this.performSubscriptionSync(key, auth.steamId).catch(() => { console.error('[subscriptions] sync failed'); subscriptionSync = { ...subscriptionSync, status: 'failed', message: 'Steam 订阅同步失败，请稍后重试', updatedAt: new Date().toISOString() }; });
+    void this.performSubscriptionSync(key, steamId).catch(() => { console.error('[subscriptions] sync failed'); subscriptionSync = { ...subscriptionSync, status: 'failed', message: 'Steam 订阅同步失败，请稍后重试', updatedAt: new Date().toISOString() }; });
     return subscriptionSync;
   }
   private async performSubscriptionSync(key: string, steamId: string) {
     const params = new URLSearchParams({ key, steamid: steamId, appid: '431960' });
-    const body = await steamFetch(`https://api.steampowered.com/ISteamRemoteStorage/EnumerateUserSubscribedFiles/v1/?${params}`);
+    const body = await steamFetch(this.infra.steamNetwork, `https://api.steampowered.com/ISteamRemoteStorage/EnumerateUserSubscribedFiles/v1/?${params}`);
     const ids: string[] = (body.response?.publishedfileids || []).map((entry: any) => String(entry.publishedfileid || entry));
     subscriptionSync = { ...subscriptionSync, total: ids.length, updatedAt: new Date().toISOString() };
     console.log(`[subscriptions] received total=${ids.length}`);
@@ -84,7 +90,7 @@ export class WorkshopController {
       const batch = ids.slice(offset, offset + 100);
       const params = new URLSearchParams({ itemcount: String(batch.length) });
       batch.forEach((id, index) => params.set(`publishedfileids[${index}]`, id));
-      const detailsBody = await steamFetch('https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: params });
+      const detailsBody = await steamFetch(this.infra.steamNetwork, 'https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: params });
       const details = detailsBody.response?.publishedfiledetails || [];
       for (const detail of details) {
         if (!detail.publishedfileid) continue;

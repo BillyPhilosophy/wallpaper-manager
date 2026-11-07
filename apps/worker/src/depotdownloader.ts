@@ -3,7 +3,9 @@ import { chmod, mkdir, readdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { prisma } from '@wallpaper-manager/database';
 import { sanitizeError } from '@wallpaper-manager/wallpaper-files';
-import type { AuthStatus, SteamClient, SteamQrLoginState } from './steam';
+import { SteamNetworkController } from '@wallpaper-manager/steam-network';
+import type { DownloadProgress } from '@wallpaper-manager/contracts';
+import type { AuthStatus, ProgressListener, SteamClient, SteamQrLoginState } from './steam';
 import type { SteamGuardClient } from './steamguard';
 
 const AUTH_TIMEOUT_MS = 120_000;
@@ -11,7 +13,8 @@ const QR_TIMEOUT_MS = 300_000;
 const PASSWORD_PROMPT = /Enter account password/i;
 const DEVICE_GUARD_PROMPT = /2-factor auth code from your authenticator app/i;
 const EMAIL_GUARD_PROMPT = /auth code sent to the email/i;
-const GUARD_PROMPT = new RegExp(`${DEVICE_GUARD_PROMPT.source}|${EMAIL_GUARD_PROMPT.source}`, 'i');
+const DEVICE_CONFIRMATION_PROMPT = /Use the Steam Mobile App to confirm your sign in/i;
+const GUARD_PROMPT = new RegExp(`${DEVICE_GUARD_PROMPT.source}|${EMAIL_GUARD_PROMPT.source}|${DEVICE_CONFIRMATION_PROMPT.source}`, 'i');
 const INCORRECT_GUARD = /previous 2-factor auth code.*incorrect/i;
 const QR_MARKER = 'Use the Steam Mobile App to sign in with this QR code:';
 const QR_ACCOUNT = /Success! Next time you can login with -username ([^\s]+) -remember-password instead of -qr/i;
@@ -23,6 +26,9 @@ interface ActiveProcess {
   exited: boolean;
   exitCode: number | null;
   error: boolean;
+  progressBuffer: string;
+  onProgress?: ProgressListener;
+  previousNetwork?: { bytes: number; time: number; rate: number };
 }
 
 export class DepotDownloaderClient implements SteamClient {
@@ -34,7 +40,7 @@ export class DepotDownloaderClient implements SteamClient {
   steamId: string | null = null;
   status: AuthStatus = 'auth_required';
 
-  constructor(private readonly binary: string, private readonly configDir: string, private readonly timeoutMs: number, private readonly steamGuard: SteamGuardClient) { }
+  constructor(private readonly binary: string, private readonly configDir: string, private readonly timeoutMs: number, private readonly steamGuard: SteamGuardClient, private readonly network = new SteamNetworkController()) { }
 
   async initialize(): Promise<void> {
     const state = await prisma.steamAuthState.findUnique({ where: { id: 1 } });
@@ -67,9 +73,9 @@ export class DepotDownloaderClient implements SteamClient {
       await this.removeStoredSession();
       await rm(probeDir, { recursive: true, force: true });
       this.accountName = null;
-      this.steamId = steamId || null;
+      this.steamId = steamId || this.steamId;
       this.clearQr();
-      run = this.start('qr', ['-app', '431960', '-manifest-only', '-qr', '-remember-password', '-dir', probeDir]);
+      run = await this.start('qr', ['-app', '431960', '-manifest-only', '-qr', '-remember-password', '-dir', probeDir]);
       await this.updateState('qr_required', '请使用 Steam 手机 App 扫码并确认');
     } finally {
       this.starting = false;
@@ -101,7 +107,7 @@ export class DepotDownloaderClient implements SteamClient {
     }
 
     this.clearQr();
-    const run = this.start('login', ['-app', '431960', '-manifest-only', '-username', username, '-remember-password', '-no-mobile', '-dir', probeDir]);
+    const run = await this.start('login', ['-app', '431960', '-manifest-only', '-username', username, '-remember-password', '-dir', probeDir]);
     try {
       let matched = await this.wait(run, new RegExp(`${PASSWORD_PROMPT.source}|${GUARD_PROMPT.source}`, 'i'), AUTH_TIMEOUT_MS);
       if (!run.exited && PASSWORD_PROMPT.test(run.output)) {
@@ -116,6 +122,11 @@ export class DepotDownloaderClient implements SteamClient {
       }
       if (!matched) throw new Error('STEAM_AUTH_REQUIRED');
 
+      if (DEVICE_CONFIRMATION_PROMPT.test(run.output)) {
+        await this.updateState('confirmation_required', '请在 Steam 手机 App 中确认本次登录');
+        void this.monitorPasswordLogin(run, probeDir);
+        return;
+      }
       if (DEVICE_GUARD_PROMPT.test(run.output)) {
         try {
           const code = await this.steamGuard.generateCode(username);
@@ -133,7 +144,7 @@ export class DepotDownloaderClient implements SteamClient {
           if (run.exited) throw error;
         }
       }
-      await this.updateState('guard_required', '请输入 Steam Guard 验证码');
+      await this.updateState(EMAIL_GUARD_PROMPT.test(run.output) ? 'email_required' : 'guard_required', EMAIL_GUARD_PROMPT.test(run.output) ? '请输入发送到邮箱的验证码' : '请输入手机令牌码');
     } catch (error) {
       this.terminate(run);
       this.active = null;
@@ -146,13 +157,13 @@ export class DepotDownloaderClient implements SteamClient {
 
   async guard(code: string): Promise<void> {
     const run = this.active;
-    if (this.status !== 'guard_required' || !run || run.mode !== 'login' || !/^[A-Za-z0-9-]{4,16}$/.test(code)) throw new Error('STEAM_GUARD_REQUIRED');
+    if (!['guard_required', 'email_required'].includes(this.status) || !run || run.mode !== 'login' || !/^[A-Za-z0-9-]{4,16}$/.test(code)) throw new Error('STEAM_GUARD_REQUIRED');
     run.output = '';
     this.write(run, `${code}\n`);
     try {
       await this.wait(run, INCORRECT_GUARD, AUTH_TIMEOUT_MS);
       if (!run.exited) {
-        await this.updateState('guard_required', 'Steam Guard 验证码无效，请重试');
+        await this.updateState(this.status, '验证码无效，请重试');
         throw new Error('STEAM_GUARD_REQUIRED');
       }
       await this.completeLogin(run, path.join(this.configDir, 'auth-probe'));
@@ -177,11 +188,10 @@ export class DepotDownloaderClient implements SteamClient {
     await this.removeStoredSession();
     await rm(path.join(this.configDir, 'auth-probe'), { recursive: true, force: true });
     this.accountName = null;
-    this.steamId = null;
     await this.updateState('auth_required');
   }
 
-  async download(target: string, workshopId: string, isCancelled: () => Promise<boolean>): Promise<void> {
+  async download(target: string, workshopId: string, isCancelled: () => Promise<boolean>, onProgress?: ProgressListener): Promise<void> {
     if (!/^\d+$/.test(workshopId)) throw new Error('BAD_REQUEST');
     if (!this.accountName) throw new Error('STEAM_AUTH_REQUIRED');
     if (this.active || this.starting) throw new Error(this.active?.mode === 'download' || this.starting ? 'STEAM_BUSY' : 'STEAM_AUTH_REQUIRED');
@@ -191,7 +201,7 @@ export class DepotDownloaderClient implements SteamClient {
     } finally {
       this.starting = false;
     }
-    const run = this.start('download', ['-app', '431960', '-pubfile', workshopId, '-username', this.accountName, '-remember-password', '-no-mobile', '-dir', target]);
+    const run = await this.start('download', ['-app', '431960', '-pubfile', workshopId, '-username', this.accountName, '-remember-password', '-dir', target], onProgress);
     try {
       await this.wait(run, new RegExp(`${PASSWORD_PROMPT.source}|${GUARD_PROMPT.source}`, 'i'), this.timeoutMs, isCancelled);
       if (!run.exited) {
@@ -217,15 +227,26 @@ export class DepotDownloaderClient implements SteamClient {
     this.clearQr();
   }
 
-  private start(mode: ActiveProcess['mode'], args: string[]): ActiveProcess {
+  private async start(mode: ActiveProcess['mode'], args: string[], onProgress?: ProgressListener): Promise<ActiveProcess> {
     console.log(`[steam] starting DepotDownloader mode=${mode}`);
-    const env: NodeJS.ProcessEnv = { ...process.env, HOME: this.configDir };
-    delete env.STEAMGUARD_CLI_PASSKEY;
-    const child = spawn(this.binary, args, { env, stdio: ['pipe', 'pipe', 'pipe'] });
-    const run: ActiveProcess = { child, mode, output: '', exited: false, exitCode: null, error: false };
+    this.starting = true;
+    try {
+      const env = await this.network.processEnv({ ...process.env, HOME: this.configDir });
+      delete env.STEAMGUARD_CLI_PASSKEY;
+      const child = spawn(this.binary, args, { env, stdio: ['pipe', 'pipe', 'pipe'] });
+      const run: ActiveProcess = { child, mode, output: '', exited: false, exitCode: null, error: false, progressBuffer: '', onProgress };
     const onData = (chunk: Buffer) => {
-      run.output = (run.output + chunk.toString('utf8')).slice(-32_000);
+      const text = chunk.toString('utf8');
+      run.output = (run.output + text).slice(-32_000);
       if (run.mode === 'qr') this.captureQr(run.output);
+      if (run.onProgress) {
+        run.progressBuffer = (run.progressBuffer + text).slice(-8192);
+        const lines = run.progressBuffer.split(/\r?\n/);
+        run.progressBuffer = lines.pop() || '';
+        for (const line of lines) {
+          if (line.startsWith('WM_PROGRESS ')) this.reportProgress(run, line);
+        }
+      }
     };
     child.stdout?.on('data', onData);
     child.stderr?.on('data', onData);
@@ -235,8 +256,38 @@ export class DepotDownloaderClient implements SteamClient {
       run.exitCode = code;
       console.log(`[steam] DepotDownloader exited mode=${mode} code=${code ?? 'null'}`);
     });
-    this.active = run;
-    return run;
+      this.active = run;
+      return run;
+    } finally {
+      this.starting = false;
+    }
+  }
+
+  private reportProgress(run: ActiveProcess, line: string): void {
+    try {
+      const data = JSON.parse(line.slice('WM_PROGRESS '.length)) as Record<string, unknown>;
+      const downloadedBytes = Number(data.downloadedBytes);
+      const networkBytes = Number(data.networkBytes);
+      const totalBytes = Number(data.totalBytes);
+      if (![downloadedBytes, networkBytes, totalBytes].every((value) => Number.isSafeInteger(value) && value >= 0)) return;
+      const now = Date.now();
+      const previous = run.previousNetwork;
+      let rate = 0;
+      if (previous && now > previous.time) {
+        const instantaneous = Math.max(0, networkBytes - previous.bytes) / ((now - previous.time) / 1000);
+        rate = previous.rate ? previous.rate * 0.7 + instantaneous * 0.3 : instantaneous;
+      }
+      run.previousNetwork = { bytes: networkBytes, time: now, rate };
+      const progress: DownloadProgress = {
+        downloadedBytes: String(downloadedBytes),
+        totalBytes: String(totalBytes),
+        networkBytes: String(networkBytes),
+        bytesPerSecond: String(Math.max(0, Math.round(rate))),
+        percent: totalBytes > 0 ? Math.min(100, Math.max(0, downloadedBytes / totalBytes * 100)) : null,
+        updatedAt: new Date(now).toISOString(),
+      };
+      run.onProgress?.(progress);
+    } catch { }
   }
 
   private captureQr(output: string): void {
@@ -246,6 +297,21 @@ export class DepotDownloaderClient implements SteamClient {
     if (!qrCode || qrCode === this.qrCode) return;
     this.qrCode = qrCode;
     this.qrUpdatedAt = new Date().toISOString();
+  }
+
+  private async monitorPasswordLogin(run: ActiveProcess, probeDir: string): Promise<void> {
+    try {
+      await this.wait(run, /(?!)/, AUTH_TIMEOUT_MS);
+      if (this.active !== run) return;
+      await this.completeLogin(run, probeDir);
+    } catch (error) {
+      this.terminate(run);
+      if (this.active !== run) return;
+      this.active = null;
+      await rm(probeDir, { recursive: true, force: true }).catch(() => undefined);
+      const code = error instanceof Error ? error.message : 'INTERNAL_ERROR';
+      await this.updateState(code === 'STEAM_AUTH_REQUIRED' ? 'auth_required' : 'error', safeAuthMessage(error));
+    }
   }
 
   private async monitorQrLogin(run: ActiveProcess, probeDir: string): Promise<void> {

@@ -1,0 +1,10 @@
+{
+  "name": "@wallpaper-manager/steam-network",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": { "build": "tsc -p tsconfig.json" },
+  "dependencies": { "undici": "^8.12.4" },
+  "devDependencies": { "@types/node": "^22.18.0", "typescript": "^5.9.3" }
+}

@@ -3,6 +3,6 @@
   "version": "1.0.0",
   "private": true,
   "scripts": { "build": "tsc -p tsconfig.json", "dev": "tsx watch src/main.ts", "start": "node dist/main.js" },
-  "dependencies": { "@wallpaper-manager/config": "workspace:*", "@wallpaper-manager/contracts": "workspace:*", "@wallpaper-manager/database": "workspace:*", "@wallpaper-manager/wallpaper-files": "workspace:*", "bullmq": "^5.65.1", "ioredis": "^5.9.2" },
+  "dependencies": { "@wallpaper-manager/config": "workspace:*", "@wallpaper-manager/contracts": "workspace:*", "@wallpaper-manager/steam-network": "workspace:*", "@wallpaper-manager/database": "workspace:*", "@wallpaper-manager/wallpaper-files": "workspace:*", "bullmq": "^5.65.1", "ioredis": "^5.9.2" },
   "devDependencies": { "@types/node": "^22.18.0", "tsx": "^4.21.0", "typescript": "^5.9.3" }
 }

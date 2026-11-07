@@ -40,7 +40,6 @@ export async function inspectWallpaper(directory: string): Promise<ProjectInfo> 
   if (!project || Array.isArray(project) || typeof project !== 'object') throw new WallpaperFileError('INVALID_PROJECT', 'project.json 格式无效');
   const type = stringValue(project.type)?.toLowerCase();
   const rating = contentRating(project.contentrating);
-  const files = await fs.readdir(directory);
   if (type === 'application') throw new WallpaperFileError('UNSUPPORTED_TYPE', '不支持 Application／EXE 壁纸');
   if (type === 'video') {
     const entry = stringValue(project.file);
@@ -62,18 +61,31 @@ export async function inspectWallpaper(directory: string): Promise<ProjectInfo> 
     return { type: 'image', contentRating: rating, entry: safe, project };
   }
   if (type === 'scene') {
+    const files = await listRegularFiles(directory);
     const declared = stringValue(project.file);
-    const candidates = declared ? [declared] : ['scene.pkg', 'scene.json', ...files.filter((f) => f.endsWith('.pkg'))];
+    const candidates = [...(declared ? [declared] : []), 'scene.pkg', 'scene.json', ...files.filter((file) => file.toLowerCase().endsWith('.pkg'))];
     const existing: string[] = [];
     for (const candidate of [...new Set(candidates)]) {
       const safe = safeRelativePath(candidate);
-      if (await isRegularFile(path.join(directory, safe))) existing.push(safe);
+      const actual = files.includes(safe) ? safe : files.find((file) => file.toLowerCase() === safe.toLowerCase());
+      if (actual && candidate === declared) return { type: 'scene', contentRating: rating, entry: actual, project };
+      if (actual && !existing.includes(actual)) existing.push(actual);
     }
     if (!existing.length) throw new WallpaperFileError('RESOURCE_MISSING', 'Scene 入口不存在');
-    const preferred = existing.find((f) => f === 'scene.pkg') ?? existing.find((f) => f === 'scene.json') ?? existing[0];
+    const preferred = existing.find((file) => file.toLowerCase() === 'scene.pkg') ?? existing.find((file) => file.toLowerCase() === 'scene.json') ?? existing[0];
     return { type: 'scene', contentRating: rating, entry: preferred, project };
   }
   return { type: 'unknown', contentRating: rating, entry: null, project };
+}
+async function listRegularFiles(root: string, relative = ''): Promise<string[]> {
+  const files: string[] = [];
+  for (const entry of await fs.readdir(path.join(root, relative), { withFileTypes: true })) {
+    if (entry.isSymbolicLink()) continue;
+    const child = relative ? `${relative}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) files.push(...await listRegularFiles(root, child));
+    else if (entry.isFile()) files.push(child);
+  }
+  return files.sort();
 }
 async function isRegularFile(file: string): Promise<boolean> { try { return (await fs.lstat(file)).isFile() && !(await fs.lstat(file)).isSymbolicLink(); } catch { return false; } }
 

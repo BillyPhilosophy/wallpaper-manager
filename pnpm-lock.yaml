@@ -41,6 +41,9 @@ importers:
       '@wallpaper-manager/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@wallpaper-manager/steam-network':
+        specifier: workspace:*
+        version: link:../../packages/steam-network
       '@wallpaper-manager/wallpaper-files':
         specifier: workspace:*
         version: link:../../packages/wallpaper-files
@@ -130,6 +133,9 @@ importers:
       '@wallpaper-manager/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@wallpaper-manager/steam-network':
+        specifier: workspace:*
+        version: link:../../packages/steam-network
       '@wallpaper-manager/wallpaper-files':
         specifier: workspace:*
         version: link:../../packages/wallpaper-files
@@ -167,6 +173,19 @@ importers:
       prisma:
         specifier: ^6.19.0
         version: 6.19.3(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
+  packages/steam-network:
+    dependencies:
+      undici:
+        specifier: ^8.12.4
+        version: 8.12.4
+    devDependencies:
+      '@types/node':
+        specifier: ^22.18.0
+        version: 22.20.5
       typescript:
         specifier: ^5.9.3
         version: 5.9.3

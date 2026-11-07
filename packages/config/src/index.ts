@@ -5,6 +5,7 @@ const base = {
   DATABASE_URL: z.string().min(1).default('file:./wallpaper-manager.db'),
   REDIS_URL: z.string().url().default('redis://127.0.0.1:6379'),
   STEAM_ROOT: z.string().min(1).default('./steam-data'),
+  STEAM_NETWORK_MODE: z.enum(['direct', 'proxy', 'auto', '']).default(''),
 };
 export const apiEnvSchema = z.object({
   ...base,

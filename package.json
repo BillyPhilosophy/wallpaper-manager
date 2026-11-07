@@ -9,7 +9,7 @@
     "dev": "corepack pnpm@10.32.1 -r --parallel dev",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "lint": "tsc -b packages/contracts packages/config packages/wallpaper-files packages/database apps/api apps/worker apps/web --pretty false",
+    "lint": "tsc -b packages/contracts packages/config packages/steam-network packages/wallpaper-files packages/database apps/api apps/worker apps/web --pretty false",
     "prisma:generate": "corepack pnpm@10.32.1 --filter @wallpaper-manager/database exec prisma generate",
     "prisma:migrate": "corepack pnpm@10.32.1 --filter @wallpaper-manager/database exec prisma migrate deploy"
   },

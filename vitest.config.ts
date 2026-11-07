@@ -4,6 +4,7 @@ export default defineConfig({
   resolve: { alias: {
     '@wallpaper-manager/contracts': new URL('./packages/contracts/src/index.ts', import.meta.url).pathname,
     '@wallpaper-manager/config': new URL('./packages/config/src/index.ts', import.meta.url).pathname,
+    '@wallpaper-manager/steam-network': new URL('./packages/steam-network/src/index.ts', import.meta.url).pathname,
     '@wallpaper-manager/database': new URL('./packages/database/src/index.ts', import.meta.url).pathname,
     '@wallpaper-manager/wallpaper-files': new URL('./packages/wallpaper-files/src/index.ts', import.meta.url).pathname,
   } },

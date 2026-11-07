@@ -5,10 +5,13 @@ import type { Job } from 'bullmq';
 import { prisma, PrismaClient } from '@wallpaper-manager/database';
 import { directorySize, inspectWallpaper, moveToTrash, publishDirectory, sanitizeError, stagingWorkshopDirectory, wallpaperDirectory } from '@wallpaper-manager/wallpaper-files';
 import type { SteamClient } from './steam';
+import type { DownloadProgress } from '@wallpaper-manager/contracts';
 
 export interface DownloadPayload { jobId: string; workshopId: string }
 export class DownloadProcessor {
+  private readonly progress = new Map<string, DownloadProgress>();
   constructor(private readonly steam: SteamClient, private readonly redis: IORedis, private readonly stagingDir: string, private readonly steamRoot: string, private readonly db: PrismaClient = prisma) {}
+  getProgress(): (DownloadProgress & { jobId: string })[] { return [...this.progress].map(([jobId, progress]) => ({ jobId, ...progress })); }
   private cancelled(id: string) { return this.redis.exists(`wallpaper:cancel:${id}`).then(Boolean); }
   private async stage(id: string, workshopId: string, from: string[], to: string) {
     const changed = await this.db.downloadJob.updateMany({ where: { id, status: { in: from } }, data: { status: to, startedAt: to === 'downloading' ? new Date() : undefined } });
@@ -22,7 +25,7 @@ export class DownloadProcessor {
       await this.stage(jobId, workshopId, ['queued'], 'downloading');
       await fs.mkdir(staging, { recursive: true, mode: 0o755 });
       const source = stagingWorkshopDirectory(this.stagingDir, jobId, workshopId);
-      await this.steam.download(source, workshopId, () => this.cancelled(jobId));
+      await this.steam.download(source, workshopId, () => this.cancelled(jobId), (progress) => { this.progress.set(jobId, progress); });
       await this.stage(jobId, workshopId, ['downloading'], 'verifying');
       const info = await inspectWallpaper(source);
       if (info.type === 'application' || info.type === 'unknown') throw new Error('UNSUPPORTED_TYPE');
@@ -36,11 +39,13 @@ export class DownloadProcessor {
       });
       if (!changed) { const trash = path.join(this.stagingDir, '..', 'trash'); await moveToTrash(this.steamRoot, trash, workshopId).then((target) => fs.rm(target, { recursive: true, force: true })); throw new Error('CANCELLED'); }
       await fs.rm(staging, { recursive: true, force: true });
+      this.progress.delete(jobId);
     } catch (error) {
       const safe = sanitizeWorkerError(error); const cancelled = safe.code === 'CANCELLED' || await this.cancelled(jobId); const status = cancelled ? 'cancelled' : 'failed';
       await this.db.downloadJob.updateMany({ where: { id: jobId, status: { notIn: ['succeeded', 'cancelled'] } }, data: { status, activeWorkshopId: null, errorCode: cancelled ? 'CANCELLED' : safe.code, errorMessage: cancelled ? '用户已取消' : safe.message, finishedAt: new Date() } });
       await this.db.wallpaper.updateMany({ where: { workshopId, status: { notIn: ['downloaded', 'deleting'] } }, data: { status: 'not_downloaded', localRelativePath: null, lastErrorCode: cancelled ? 'CANCELLED' : safe.code, lastErrorMessage: cancelled ? '用户已取消' : safe.message } });
       await fs.rm(staging, { recursive: true, force: true }).catch(() => undefined);
+      this.progress.delete(jobId);
       if (cancelled) return; throw error;
     }
   }

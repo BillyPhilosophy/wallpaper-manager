@@ -27,6 +27,38 @@ test('QR login is the default Steam sign-in action', async ({ page }) => {
   expect(await qr.evaluate((element) => (element as HTMLCanvasElement).width)).toBeGreaterThan(0);
   await expect(page.getByText('等待手机扫码')).toBeVisible();
 });
+test('device confirmation does not require a verification code', async ({ page }) => {
+  await page.route('**/api/steam/auth/status', (route) => route.fulfill({ json: { status: 'confirmation_required', message: '请在 Steam 手机 App 中确认本次登录', accountName: 'test', steamId: null, updatedAt: new Date().toISOString() } }));
+  await page.route('**/api/steam/auth/qr', (route) => route.fulfill({ json: { status: 'confirmation_required', qrCode: null, updatedAt: null } }));
+  await page.route('**/api/system/capabilities', (route) => route.fulfill({ json: { workerReady: true, steamAuthenticated: false, steamApiKeyConfigured: true, livePreviewTypes: ['scene', 'web'], webwallglVersion: '3.0.0' } }));
+  await page.route('**/api/workshop/subscriptions/sync', (route) => route.fulfill({ json: { status: 'idle', total: 0, synced: 0, message: null, updatedAt: new Date().toISOString() } }));
+  await page.goto('/settings');
+  await expect(page.getByText('等待手机确认', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '提交验证码' })).toHaveCount(0);
+});
+test('known SteamID64 can synchronize subscriptions without Steam login', async ({ page }) => {
+  let requestBody = '';
+  await page.route('**/api/steam/auth/status', (route) => route.fulfill({ json: { status: 'auth_required', message: null, accountName: null, steamId: null, updatedAt: new Date().toISOString() } }));
+  await page.route('**/api/steam/auth/qr', (route) => route.fulfill({ json: { status: 'auth_required', qrCode: null, updatedAt: null } }));
+  await page.route('**/api/system/capabilities', (route) => route.fulfill({ json: { workerReady: true, steamAuthenticated: false, steamApiKeyConfigured: true, livePreviewTypes: ['scene', 'web'], webwallglVersion: '3.0.0' } }));
+  await page.route('**/api/workshop/subscriptions/sync', (route) => {
+    const running = route.request().method() === 'POST';
+    if (running) requestBody = route.request().postData() || '';
+    return route.fulfill({ json: { status: running ? 'running' : 'idle', total: 0, synced: 0, message: null, updatedAt: new Date().toISOString() } });
+  });
+  await page.goto('/settings');
+  await page.getByLabel('SteamID64', { exact: true }).fill('76561197960265851');
+  await page.getByRole('button', { name: '同步订阅列表', exact: true }).click();
+  await expect.poll(() => requestBody).toBe('{"steamId":"76561197960265851"}');
+});
+test('download center displays upstream progress and rate', async ({ page }) => {
+  const progress = { downloadedBytes: '50000000', totalBytes: '100000000', networkBytes: '25000000', bytesPerSecond: '1000000', percent: 50, updatedAt: new Date().toISOString() };
+  await page.route('**/api/downloads?**', (route) => route.fulfill({ json: { items: [{ id: '6f67e62b-8a27-4d2b-a77f-e42c67538e45', workshopId: '123', status: 'downloading', attempt: 1, errorCode: null, errorMessage: null, createdAt: new Date().toISOString(), startedAt: null, finishedAt: null, progress }], page: 1, pageSize: 50, total: 1 } }));
+  await page.goto('/downloads');
+  await expect(page.getByText('50.0%', { exact: true })).toBeVisible();
+  await expect(page.getByText('1.0 MB/s', { exact: true })).toBeVisible();
+  await expect(page.getByText('50.0 MB / 100.0 MB', { exact: true })).toBeVisible();
+});
 test('downloaded unsupported type shows official fallback', async ({ page }) => {
   const local = { ...item, localStatus: 'downloaded', status: 'downloaded', metadataJson: {}, localRelativePath: '123', fileSizeBytes: '1024', lastErrorCode: null, lastErrorMessage: null, downloadedAt: new Date().toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), type: 'application' };
   await page.route('**/api/workshop/items/123', (route) => route.fulfill({ json: { ...item, type: 'application', localStatus: 'downloaded' } }));

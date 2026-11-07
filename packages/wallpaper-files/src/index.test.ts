@@ -17,6 +17,16 @@ describe('project parsing', () => {
     await writeFile(path.join(root, 'project.json'), JSON.stringify({ type: 'web', file: 'index.html' })); await writeFile(path.join(root, 'index.html'), '<html>');
     expect((await inspectWallpaper(root)).type).toBe('web');
   });
+  it('locates nested and case-insensitive scene packages while honoring declared entries', async () => {
+    await mkdir(path.join(root, 'nested'));
+    await writeFile(path.join(root, 'project.json'), JSON.stringify({ type: 'scene' }));
+    await writeFile(path.join(root, 'nested', 'Scene.PKG'), 'fixture');
+    expect((await inspectWallpaper(root)).entry).toBe('nested/Scene.PKG');
+    await writeFile(path.join(root, 'project.json'), JSON.stringify({ type: 'scene', file: 'NESTED/SCENE.PKG' }));
+    expect((await inspectWallpaper(root)).entry).toBe('nested/Scene.PKG');
+    await writeFile(path.join(root, 'scene.pkg'), 'other');
+    expect((await inspectWallpaper(root)).entry).toBe('nested/Scene.PKG');
+  });
   it('reads content rating and validates image entries', async () => {
     await writeFile(path.join(root, 'project.json'), JSON.stringify({ type: 'image', file: 'wallpaper.png', contentrating: 'PG13' })); await writeFile(path.join(root, 'wallpaper.png'), 'fixture');
     const info = await inspectWallpaper(root);

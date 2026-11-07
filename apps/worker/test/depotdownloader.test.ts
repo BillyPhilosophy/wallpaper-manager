@@ -114,6 +114,51 @@ describe('DepotDownloader authentication', () => {
     }
   });
 
+  it('waits for upstream device confirmation without requesting a code', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'wallpaper-manager-depot-'));
+    const depot = new FakeProcess((input, child) => {
+      if (input === 'secret\n') queueMicrotask(() => child.output('STEAM GUARD! Use the Steam Mobile App to confirm your sign in...', true));
+    });
+    vi.mocked(spawn).mockImplementation(() => {
+      queueMicrotask(() => depot.output('Enter account password for "test": '));
+      return depot.asChild();
+    });
+    const steam = new DepotDownloaderClient('depotdownloader', path.join(root, 'config'), 1000, new SteamGuardClient('steamguard', path.join(root, 'missing')));
+    try {
+      await steam.login('test', 'secret');
+      expect(steam.status).toBe('confirmation_required');
+      expect(depot.stdin.write).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(spawn).mock.calls[0][1]).not.toContain('-no-mobile');
+      depot.close();
+      await vi.waitFor(() => expect(steam.status).toBe('authenticated'));
+    } finally {
+      await steam.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('distinguishes email Guard from a device authenticator code', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'wallpaper-manager-depot-'));
+    const depot = new FakeProcess((input, child) => {
+      if (input === 'secret\n') queueMicrotask(() => child.output('STEAM GUARD! Please enter the auth code sent to the email at hidden@example.test: ', true));
+      if (input === 'EMAIL\n') child.close();
+    });
+    vi.mocked(spawn).mockImplementation(() => {
+      queueMicrotask(() => depot.output('Enter account password for "test": '));
+      return depot.asChild();
+    });
+    const steam = new DepotDownloaderClient('depotdownloader', path.join(root, 'config'), 1000, new SteamGuardClient('steamguard', path.join(root, 'missing')));
+    try {
+      await steam.login('test', 'secret');
+      expect(steam.status).toBe('email_required');
+      await steam.guard('EMAIL');
+      expect(steam.status).toBe('authenticated');
+    } finally {
+      await steam.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('rejects an incorrect manual Guard code without closing the login process', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'wallpaper-manager-depot-'));
     const depot = new FakeProcess((input, child) => {
@@ -165,6 +210,25 @@ describe('DepotDownloader authentication', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it('keeps a saved subscription SteamID64 across QR login and logout', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'wallpaper-manager-depot-'));
+    const depot = new FakeProcess();
+    depot.kill.mockImplementation(() => { depot.close(143); });
+    vi.mocked(spawn).mockImplementation(() => depot.asChild());
+    const steam = new DepotDownloaderClient('depotdownloader', path.join(root, 'config'), 1000, new SteamGuardClient('steamguard', path.join(root, 'missing')));
+    steam.steamId = '76561197960265851';
+    try {
+      await steam.startQrLogin();
+      expect(steam.steamId).toBe('76561197960265851');
+      await steam.logout();
+      expect(steam.steamId).toBe('76561197960265851');
+      expect(steam.status).toBe('auth_required');
+    } finally {
+      await steam.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('DepotDownloader downloads', () => {
@@ -191,6 +255,34 @@ describe('DepotDownloader downloads', () => {
       expect(args).toEqual(expect.arrayContaining(['-app', '431960', '-pubfile', '123', '-remember-password', '-dir', target]));
       expect(args).not.toContain('-password');
       await expect(stat(path.join(target, '.DepotDownloader'))).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      await steam.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('parses structured byte progress and reports percentage and rate', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'wallpaper-manager-depot-'));
+    const target = path.join(root, 'target');
+    const depot = new FakeProcess();
+    vi.mocked(spawn).mockImplementation(() => {
+      queueMicrotask(async () => {
+        depot.output('WM_PROG');
+        depot.output('RESS {"downloadedBytes":50,"networkBytes":25,"totalBytes":100}\n');
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        depot.output('WM_PROGRESS {"downloadedBytes":100,"networkBytes":75,"totalBytes":100}\n');
+        depot.close();
+      });
+      return depot.asChild();
+    });
+    const steam = new DepotDownloaderClient('depotdownloader', path.join(root, 'config'), 1000, new SteamGuardClient('steamguard', path.join(root, 'missing')));
+    steam.accountName = 'test';
+    const updates: { percent: number | null; bytesPerSecond: string }[] = [];
+    try {
+      await steam.download(target, '123', async () => false, (progress) => updates.push(progress));
+      expect(updates.map((update) => update.percent)).toEqual([50, 100]);
+      expect(updates[0].bytesPerSecond).toBe('0');
+      expect(Number(updates[1].bytesPerSecond)).toBeGreaterThan(0);
     } finally {
       await steam.close();
       await rm(root, { recursive: true, force: true });

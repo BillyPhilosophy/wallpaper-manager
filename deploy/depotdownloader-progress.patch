@@ -1,0 +1,89 @@
+diff --git a/DepotDownloader/ContentDownloader.cs b/DepotDownloader/ContentDownloader.cs
+index 967cc49..0a0d16a 100644
+--- a/DepotDownloader/ContentDownloader.cs
++++ b/DepotDownloader/ContentDownloader.cs
+@@ -706,6 +706,20 @@ namespace DepotDownloader
+                 downloadCounter.totalBytesCompressed, downloadCounter.totalBytesUncompressed, depots.Count);
+         }
+ 
++        private static DateTime lastStructuredProgress;
++
++        private static void ReportStructuredDownloadProgress(GlobalDownloadCounter counter)
++        {
++            var now = DateTime.UtcNow;
++            if (counter.totalBytesUncompressed != counter.completeDownloadSize && now - lastStructuredProgress < TimeSpan.FromMilliseconds(250))
++            {
++                return;
++            }
++
++            lastStructuredProgress = now;
++            Console.WriteLine("WM_PROGRESS {{\"downloadedBytes\":{0},\"networkBytes\":{1},\"totalBytes\":{2}}}", counter.totalBytesUncompressed, counter.totalBytesCompressed, counter.completeDownloadSize);
++        }
++
+         private static async Task<DepotFilesData> ProcessDepotManifestAndFiles(CancellationTokenSource cts, DepotDownloadInfo depot, GlobalDownloadCounter downloadCounter)
+         {
+             var depotCounter = new DepotDownloadCounter();
+@@ -1325,6 +1339,7 @@ namespace DepotDownloader
+                 downloadCounter.totalBytesUncompressed += chunk.UncompressedLength;
+ 
+                 Ansi.Progress(downloadCounter.totalBytesUncompressed, downloadCounter.completeDownloadSize);
++                ReportStructuredDownloadProgress(downloadCounter);
+             }
+ 
+             if (remainingChunks == 0)
+diff --git a/DepotDownloader/HttpClientFactory.cs b/DepotDownloader/HttpClientFactory.cs
+index 7a62211..3485ed7 100644
+--- a/DepotDownloader/HttpClientFactory.cs
++++ b/DepotDownloader/HttpClientFactory.cs
+@@ -1,6 +1,8 @@
+ // This file is subject to the terms and conditions defined
+ // in file 'LICENSE', which is part of this source code package.
+ 
++using System;
++using System.Net;
+ using System.IO;
+ using System.Net.Http;
+ using System.Net.Http.Headers;
+@@ -16,10 +18,19 @@ namespace DepotDownloader
+     {
+         public static HttpClient CreateHttpClient()
+         {
+-            var client = new HttpClient(new SocketsHttpHandler
++            var proxyUrl = Environment.GetEnvironmentVariable("STEAM_PROXY_URL");
++            var handler = new SocketsHttpHandler
+             {
+                 ConnectCallback = IPv4ConnectAsync
+-            });
++            };
++
++            if (!string.IsNullOrWhiteSpace(proxyUrl))
++            {
++                handler.Proxy = new WebProxy(proxyUrl);
++                handler.UseProxy = true;
++            }
++
++            var client = new HttpClient(handler);
+ 
+             var assemblyVersion = typeof(HttpClientFactory).Assembly.GetName().Version.ToString(fieldCount: 3);
+             client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("DepotDownloader", assemblyVersion));
+diff --git a/DepotDownloader/Steam3Session.cs b/DepotDownloader/Steam3Session.cs
+index 9104f33..824c247 100644
+--- a/DepotDownloader/Steam3Session.cs
++++ b/DepotDownloader/Steam3Session.cs
+@@ -63,9 +63,13 @@ namespace DepotDownloader
+             this.authenticatedUser = details.Username != null || ContentDownloader.Config.UseQrCode;
+ 
+             var clientConfiguration = SteamConfiguration.Create(config =>
+-                config
+-                    .WithHttpClientFactory(HttpClientFactory.CreateHttpClient)
+-            );
++            {
++                config.WithHttpClientFactory(HttpClientFactory.CreateHttpClient);
++                if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("STEAM_PROXY_URL")))
++                {
++                    config.WithProtocolTypes(ProtocolTypes.WebSocket);
++                }
++            });
+ 
+             this.steamClient = new SteamClient(clientConfiguration);
+ 

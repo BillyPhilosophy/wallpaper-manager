@@ -369,7 +369,7 @@ not_downloaded
 - `failed/cancelled` 可以重新入队。
 - `downloaded` 删除时进入 `deleting`，成功后回到 `not_downloaded`。
 - API 与 Worker 更新状态必须使用条件更新，防止取消操作与完成回调互相覆盖。
-- DepotDownloader 不提供可靠总进度时，界面只显示阶段，不伪造百分比。
+- 有真实字节计数时显示下载占比、已下载/总字节数和平均速率；没有可靠总量时只显示阶段，不伪造百分比。
 
 ### 7.4 不保存的内容
 
@@ -425,7 +425,7 @@ GET /api/workshop/items/:workshopId
 
 - 使用 Steam 官方接口，不抓取 DeepSeek、第三方壁纸站或网页 HTML 作为元数据源。
 - `STEAM_WEB_API_KEY` 只存在服务端，绝不返回浏览器。
-- Steam Web API Key 与 DepotDownloader 登录是两套独立配置。
+- Steam Web API Key 与 DepotDownloader 登录是两套独立配置；订阅同步只依赖 API Key 和 SteamID64，已知 SteamID 时无需登录。
 - 搜索响应保留 Steam 分页游标，不自行伪造游标。
 - 对官方元数据和预览地址做短期缓存，并处理限流。
 - 搜索阶段只返回官方预览和 `not_downloaded/downloaded` 等本地状态，不返回虚构的实时预览地址。
@@ -461,10 +461,11 @@ Guard 请求：
 - 密码和 Guard 码不得进入 BullMQ payload、SQLite、应用日志和错误堆栈。
 - 通过受控 stdin 与 DepotDownloader 交互，禁止把密码拼入命令行参数。
 - 默认通过 DepotDownloader `-qr` 提供手机扫码登录；二维码只保存在 Worker 内存，自动刷新且五分钟过期，不进入数据库、队列或日志。
-- 账密登录使用 `-no-mobile` 将手机确认切换为令牌码输入，steamguard-cli 自动产码；不可用时保留手工 Guard。
+- 账密登录按上游要求区分手机确认、手机令牌码和邮箱验证码；只有手机令牌码使用 steamguard-cli 自动产码，失败时保留手工输入。
 - steamguard-cli maFiles 包含长期 2FA 密钥，只能保存在 `steam-config` 卷并限制权限；passkey 通过受保护文件读取，不进入命令行。
 - 登录状态由 Worker 统一管理，API 仅通过内部 HTTP 转发登录请求，不把秘密写入队列。
-- 支持 `authenticated/auth_required/guard_required/qr_required/error` 状态。
+- `STEAM_NETWORK_MODE` 支持 `direct/proxy/auto`，配置代理时默认 `proxy`；`auto` 使用 5 秒直连探测和 15 分钟粘性选择，仅网络错误触发代理切换，HTTP 状态和认证错误不切换。
+- 支持 `authenticated/auth_required/guard_required/email_required/confirmation_required/qr_required/error` 状态。
 - 持久化非敏感的账号名和 SteamID64，Worker 重启后使用 DepotDownloader refresh token，不再以内存认证状态阻止下载。
 - 会话失效后返回明确重新登录状态，不能无限重试。
 
