@@ -9,6 +9,9 @@ import type { SteamClient } from '../src/steam';
 describe('worker errors', () => {
   it('classifies without leaking input', () => {
     expect(sanitizeWorkerError(new Error('STEAM_AUTH_REQUIRED')).code).toBe('STEAM_AUTH_REQUIRED');
+    expect(sanitizeWorkerError(new Error('STEAM_NETWORK_UNAVAILABLE'))).toEqual({ code: 'STEAM_NETWORK_UNAVAILABLE', message: '无法连接 Steam，请检查直连或代理线路' });
+    expect(sanitizeWorkerError(new Error('STEAM_APP_UNAVAILABLE')).code).toBe('STEAM_APP_UNAVAILABLE');
+    expect(sanitizeWorkerError(new Error('STEAM_PROCESS_FAILED')).code).toBe('STEAM_PROCESS_FAILED');
     expect(sanitizeWorkerError(new Error('password=secret'))).toEqual({ code: 'INTERNAL_ERROR', message: '操作失败，请稍后重试' });
   });
 });

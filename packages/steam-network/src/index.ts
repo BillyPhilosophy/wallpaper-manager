@@ -27,19 +27,33 @@ export class SteamNetworkController {
   }
 
   async fetchSteam(url: string, init: RequestInit = {}): Promise<Response> {
-    if (this.mode !== 'auto') return this.dispatch(this.mode, url, init);
-    const route = await this.selectRoute();
     try {
-      return await this.dispatch(route, url, init);
+      if (this.mode !== 'auto') return await this.dispatch(this.mode, url, init);
+      const route = await this.selectRoute();
+      try {
+        return await this.dispatch(route, url, init);
+      } catch (error) {
+        if (route === 'proxy' || !isNetworkError(error)) throw error;
+        logNetworkFailure(route, error);
+        this.rememberRoute('proxy');
+        return await this.dispatch('proxy', url, init);
+      }
     } catch (error) {
-      if (route === 'proxy' || !isNetworkError(error)) throw error;
-      this.rememberRoute('proxy');
-      return this.dispatch('proxy', url, init);
+      if (error instanceof Error && error.name === 'HttpStatusError') throw error;
+      if (error instanceof Error && error.message === 'STEAM_NETWORK_UNAVAILABLE') throw error;
+      logNetworkFailure(this.route, error);
+      throw new Error('STEAM_NETWORK_UNAVAILABLE');
     }
   }
 
   async processEnv(env: NodeJS.ProcessEnv): Promise<NodeJS.ProcessEnv> {
-    const route = await this.selectRoute();
+    let route: NetworkRoute;
+    try {
+      route = await this.selectRoute();
+    } catch (error) {
+      if (error instanceof Error && error.name === 'HttpStatusError') throw error;
+      throw new Error('STEAM_NETWORK_UNAVAILABLE');
+    }
     const next = { ...env };
     for (const key of ['STEAM_PROXY_URL', 'HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy']) delete next[key];
     if (route === 'proxy' && this.proxyUrl) {
@@ -71,8 +85,12 @@ export class SteamNetworkController {
       return 'direct';
     } catch (error) {
       if (!isNetworkError(error)) throw error;
+      logNetworkFailure('direct', error);
     }
-    const response = await this.dispatch('proxy', PROBE_URL, {}, this.probeTimeoutMs);
+    const response = await this.dispatch('proxy', PROBE_URL, {}, this.probeTimeoutMs).catch((error) => {
+      logNetworkFailure('proxy', error);
+      throw error;
+    });
     if (!response.ok) {
       const error = new Error('STEAM_API_UNAVAILABLE');
       error.name = 'HttpStatusError';
@@ -96,4 +114,27 @@ export class SteamNetworkController {
 
 function isNetworkError(error: unknown): boolean {
   return !(error instanceof Error && ['AbortError', 'HttpStatusError'].includes(error.name));
+}
+
+
+export function networkErrorCode(error: unknown): string {
+  const chain: object[] = [];
+  let current = error;
+  for (let depth = 0; depth < 4 && current && typeof current === 'object'; depth++) {
+    chain.push(current);
+    current = (current as { cause?: unknown }).cause;
+  }
+  for (const item of chain) {
+    const code = (item as { code?: unknown }).code;
+    if (typeof code === 'string' && /^[A-Z0-9_.-]+$/i.test(code)) return code.slice(0, 64);
+  }
+  for (const item of chain) {
+    const name = (item as { name?: unknown }).name;
+    if (typeof name === 'string' && /^[A-Z0-9_.-]+$/i.test(name)) return name.slice(0, 64);
+  }
+  return 'NETWORK_ERROR';
+}
+
+function logNetworkFailure(route: NetworkRoute, error: unknown): void {
+  console.warn(`[steam-network] route=${route} code=${networkErrorCode(error)}`);
 }

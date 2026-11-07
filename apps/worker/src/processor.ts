@@ -61,7 +61,7 @@ export async function refreshDownloadedClassifications(steamRoot: string, db: Pr
 }
 export function sanitizeWorkerError(error: unknown): { code: string; message: string } {
   const code = error instanceof Error ? error.message : 'INTERNAL_ERROR';
-  const known: Record<string, string> = { STEAM_AUTH_REQUIRED: '需要先完成 Steam 登录', STEAM_GUARD_REQUIRED: '需要 Steam Guard 验证码', STEAM_BUSY: '另一个 Steam 操作正在进行', STEAM_RATE_LIMITED: 'Steam 下载限流，请稍后重试', STEAM_DOWNLOAD_FAILED: 'Steam 下载失败', DOWNLOAD_TIMEOUT: '下载超时', DISK_FULL: '磁盘空间不足', WORKSHOP_ITEM_NOT_FOUND: '工坊项目不存在或不可访问', UNSUPPORTED_TYPE: '不支持该壁纸类型', RESOURCE_MISSING: '壁纸关键资源缺失', CANCELLED: '用户已取消' };
+  const known: Record<string, string> = { STEAM_AUTH_REQUIRED: '需要先完成 Steam 登录', STEAM_GUARD_REQUIRED: '需要 Steam Guard 验证码', STEAM_BUSY: '另一个 Steam 操作正在进行', STEAM_RATE_LIMITED: 'Steam 下载限流，请稍后重试', STEAM_NETWORK_UNAVAILABLE: '无法连接 Steam，请检查直连或代理线路', STEAM_APP_UNAVAILABLE: '当前账号无法访问 Wallpaper Engine', STEAM_PROCESS_FAILED: 'DepotDownloader 进程异常退出，请检查日志中的错误码', STEAM_DOWNLOAD_FAILED: 'Steam 下载失败', DOWNLOAD_TIMEOUT: '下载超时', DISK_FULL: '磁盘空间不足', WORKSHOP_ITEM_NOT_FOUND: '工坊项目不存在或不可访问', UNSUPPORTED_TYPE: '不支持该壁纸类型', RESOURCE_MISSING: '壁纸关键资源缺失', CANCELLED: '用户已取消' };
   if (known[code]) return { code, message: known[code] };
   return sanitizeError(error);
 }

@@ -94,7 +94,9 @@ export class DepotDownloaderClient implements SteamClient {
 
     this.starting = true;
     const probeDir = path.join(this.configDir, 'auth-probe');
+    let run: ActiveProcess | null = null;
     try {
+      await this.updateState('authenticating', '正在连接 Steam，请稍候');
       await mkdir(this.configDir, { recursive: true, mode: 0o700 });
       await chmod(this.configDir, 0o700).catch(() => undefined);
       const previousAccount = this.accountName;
@@ -102,56 +104,54 @@ export class DepotDownloaderClient implements SteamClient {
       this.steamId = steamId || await this.steamGuard.steamId(username) || (previousAccount === username ? this.steamId : null);
       await this.removeStoredSession();
       await rm(probeDir, { recursive: true, force: true });
-    } finally {
-      this.starting = false;
-    }
-
-    this.clearQr();
-    const run = await this.start('login', ['-app', '431960', '-manifest-only', '-username', username, '-remember-password', '-dir', probeDir]);
-    try {
-      let matched = await this.wait(run, new RegExp(`${PASSWORD_PROMPT.source}|${GUARD_PROMPT.source}`, 'i'), AUTH_TIMEOUT_MS);
-      if (!run.exited && PASSWORD_PROMPT.test(run.output)) {
-        run.output = '';
-        this.write(run, `${password.replace(/[\r\n]/g, '')}\n`);
+      this.clearQr();
+      const activeRun = await this.start('login', ['-app', '431960', '-manifest-only', '-username', username, '-remember-password', '-dir', probeDir]);
+      run = activeRun;
+      let matched = await this.wait(activeRun, new RegExp(`${PASSWORD_PROMPT.source}|${GUARD_PROMPT.source}`, 'i'), AUTH_TIMEOUT_MS);
+      if (!activeRun.exited && PASSWORD_PROMPT.test(activeRun.output)) {
+        activeRun.output = '';
+        this.write(activeRun, `${password.replace(/[\r\n]/g, '')}\n`);
         password = '';
-        matched = await this.wait(run, GUARD_PROMPT, AUTH_TIMEOUT_MS);
+        matched = await this.wait(activeRun, GUARD_PROMPT, AUTH_TIMEOUT_MS);
       }
-      if (run.exited) {
-        await this.completeLogin(run, probeDir);
+      if (activeRun.exited) {
+        await this.completeLogin(activeRun, probeDir);
         return;
       }
       if (!matched) throw new Error('STEAM_AUTH_REQUIRED');
 
-      if (DEVICE_CONFIRMATION_PROMPT.test(run.output)) {
+      if (DEVICE_CONFIRMATION_PROMPT.test(activeRun.output)) {
         await this.updateState('confirmation_required', '请在 Steam 手机 App 中确认本次登录');
-        void this.monitorPasswordLogin(run, probeDir);
+        void this.monitorPasswordLogin(activeRun, probeDir);
         return;
       }
-      if (DEVICE_GUARD_PROMPT.test(run.output)) {
+      if (DEVICE_GUARD_PROMPT.test(activeRun.output)) {
         try {
           const code = await this.steamGuard.generateCode(username);
-          run.output = '';
-          this.write(run, `${code}\n`);
-          await this.wait(run, INCORRECT_GUARD, AUTH_TIMEOUT_MS);
-          if (run.error) throw new Error('STEAM_AUTH_REQUIRED');
-          if (!run.exited && INCORRECT_GUARD.test(run.output)) throw new Error('STEAM_GUARD_REQUIRED');
-          if (run.exited) {
-            await this.completeLogin(run, probeDir);
+          activeRun.output = '';
+          this.write(activeRun, `${code}\n`);
+          await this.wait(activeRun, INCORRECT_GUARD, AUTH_TIMEOUT_MS);
+          if (activeRun.error) throw new Error('STEAM_AUTH_REQUIRED');
+          if (!activeRun.exited && INCORRECT_GUARD.test(activeRun.output)) throw new Error('STEAM_GUARD_REQUIRED');
+          if (activeRun.exited) {
+            await this.completeLogin(activeRun, probeDir);
             return;
           }
         } catch (error) {
           if (!(error instanceof Error) || error.message !== 'STEAM_GUARD_REQUIRED') throw error;
-          if (run.exited) throw error;
+          if (activeRun.exited) throw error;
         }
       }
-      await this.updateState(EMAIL_GUARD_PROMPT.test(run.output) ? 'email_required' : 'guard_required', EMAIL_GUARD_PROMPT.test(run.output) ? '请输入发送到邮箱的验证码' : '请输入手机令牌码');
+      await this.updateState(EMAIL_GUARD_PROMPT.test(activeRun.output) ? 'email_required' : 'guard_required', EMAIL_GUARD_PROMPT.test(activeRun.output) ? '请输入发送到邮箱的验证码' : '请输入手机令牌码');
     } catch (error) {
-      this.terminate(run);
-      this.active = null;
+      if (run) this.terminate(run);
+      if (this.active === run) this.active = null;
       await rm(probeDir, { recursive: true, force: true }).catch(() => undefined);
       const code = error instanceof Error ? error.message : 'INTERNAL_ERROR';
       await this.updateState(code === 'STEAM_AUTH_REQUIRED' ? 'auth_required' : 'error', safeAuthMessage(error));
       throw error;
+    } finally {
+      this.starting = false;
     }
   }
 
@@ -233,6 +233,7 @@ export class DepotDownloaderClient implements SteamClient {
     try {
       const env = await this.network.processEnv({ ...process.env, HOME: this.configDir });
       delete env.STEAMGUARD_CLI_PASSKEY;
+      console.log(`[steam] network route=${env.STEAM_PROXY_URL ? 'proxy' : 'direct'}`);
       const child = spawn(this.binary, args, { env, stdio: ['pipe', 'pipe', 'pipe'] });
       const run: ActiveProcess = { child, mode, output: '', exited: false, exitCode: null, error: false, progressBuffer: '', onProgress };
     const onData = (chunk: Buffer) => {
@@ -254,7 +255,9 @@ export class DepotDownloaderClient implements SteamClient {
     child.on('close', (code) => {
       run.exited = true;
       run.exitCode = code;
-      console.log(`[steam] DepotDownloader exited mode=${mode} code=${code ?? 'null'}`);
+      const message = `[steam] DepotDownloader exited mode=${mode} code=${code ?? 'null'}`;
+      if (code === 0) console.log(message);
+      else console.warn(`${message} reason=${run.error ? 'SPAWN_FAILED' : depotFailureCode(run.output)}`);
     });
       this.active = run;
       return run;
@@ -318,7 +321,7 @@ export class DepotDownloaderClient implements SteamClient {
     try {
       await this.wait(run, /(?!)/, QR_TIMEOUT_MS);
       if (this.active !== run) return;
-      if (run.exitCode !== 0 || run.error) throw new Error('STEAM_AUTH_REQUIRED');
+      if (run.exitCode !== 0 || run.error) throw new Error(run.error ? 'STEAM_PROCESS_FAILED' : depotFailureCode(run.output));
       const accountName = QR_ACCOUNT.exec(run.output)?.[1];
       if (!accountName) throw new Error('QR_ACCOUNT_MISSING');
       this.accountName = accountName;
@@ -358,7 +361,7 @@ export class DepotDownloaderClient implements SteamClient {
   }
 
   private async completeLogin(run: ActiveProcess, probeDir: string): Promise<void> {
-    if (run.exitCode !== 0 || run.error) throw new Error('STEAM_AUTH_REQUIRED');
+    if (run.exitCode !== 0 || run.error) throw new Error(run.error ? 'STEAM_PROCESS_FAILED' : depotFailureCode(run.output));
     this.steamId = this.steamId || (this.accountName ? await this.steamGuard.steamId(this.accountName) : null);
     if (this.active === run) this.active = null;
     this.clearQr();
@@ -394,19 +397,40 @@ export class DepotDownloaderClient implements SteamClient {
 }
 
 function downloadErrorCode(output: string): string {
+  return depotFailureCode(output);
+}
+
+function depotFailureCode(output: string): string {
+  if (!output.trim()) return 'STEAM_PROCESS_FAILED';
   if (/rate.?limit|too many requests|throttl/i.test(output)) return 'STEAM_RATE_LIMITED';
-  if (/file.?not.?found|not found|unsupported file type|unable to locate manifest/i.test(output)) return 'WORKSHOP_ITEM_NOT_FOUND';
-  if (/access token was rejected|failed to authenticate|invalid.?password|access denied|accountlogondenied/i.test(output)) return 'STEAM_AUTH_REQUIRED';
+  if (/could not connect|connection.*failed|timed out|timeout|ECONN|ENOTFOUND|UND_ERR_|network|ServiceUnavailable|no connection/i.test(output)) return 'STEAM_NETWORK_UNAVAILABLE';
+  if (/not available from this account|app .*not available/i.test(output)) return 'STEAM_APP_UNAVAILABLE';
+  if (/access token was rejected|failed to authenticate|invalid.?password|invalid.?signature|access denied|accountlogondenied|\b(expired|revoked)\b/i.test(output)) return 'STEAM_AUTH_REQUIRED';
+  if (/steam guard|authenticator|verification code/i.test(output)) return 'STEAM_GUARD_REQUIRED';
+  if (/file.?not.?found|not found|no subscription|unsupported file type|unable to locate manifest/i.test(output)) return 'WORKSHOP_ITEM_NOT_FOUND';
   if (/no space left|ENOSPC/.test(output)) return 'DISK_FULL';
   return 'STEAM_DOWNLOAD_FAILED';
 }
 
-export function safeAuthMessage(error: unknown): string {
+const AUTH_ERROR_CODES = new Set(['STEAM_AUTH_REQUIRED', 'STEAM_GUARD_REQUIRED', 'STEAM_BUSY', 'STEAM_RATE_LIMITED', 'STEAM_NETWORK_UNAVAILABLE', 'STEAM_APP_UNAVAILABLE', 'STEAM_PROCESS_FAILED', 'STEAM_DOWNLOAD_FAILED', 'STEAM_API_UNAVAILABLE', 'DOWNLOAD_TIMEOUT', 'INVALID_LOGIN', 'INVALID_STEAM_ID', 'QR_ACCOUNT_MISSING']);
+
+export function authErrorCode(error: unknown): string {
   const code = error instanceof Error ? error.message : 'INTERNAL_ERROR';
+  return AUTH_ERROR_CODES.has(code) ? code : 'INTERNAL_ERROR';
+}
+
+export function safeAuthMessage(error: unknown): string {
+  const code = authErrorCode(error);
   const messages: Record<string, string> = {
     STEAM_AUTH_REQUIRED: 'Steam 登录失效，请重新登录',
     STEAM_GUARD_REQUIRED: 'Steam Guard 验证失败',
     STEAM_BUSY: '另一个 Steam 操作正在进行',
+    STEAM_RATE_LIMITED: 'Steam 请求限流，请稍后重试',
+    STEAM_NETWORK_UNAVAILABLE: '无法连接 Steam，请检查直连或代理线路',
+    STEAM_APP_UNAVAILABLE: '当前账号无法访问 Wallpaper Engine',
+    STEAM_PROCESS_FAILED: 'DepotDownloader 进程异常退出，请检查日志中的错误码',
+    STEAM_DOWNLOAD_FAILED: 'Steam 操作失败，请检查日志中的错误码',
+    STEAM_API_UNAVAILABLE: 'Steam 官方接口暂不可用',
     DOWNLOAD_TIMEOUT: 'DepotDownloader 操作超时',
     INVALID_LOGIN: '用户名或密码格式无效',
     INVALID_STEAM_ID: 'SteamID64 格式无效',

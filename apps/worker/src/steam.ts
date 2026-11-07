@@ -1,6 +1,6 @@
 import type { DownloadProgress } from '@wallpaper-manager/contracts';
 
-export type AuthStatus = 'authenticated' | 'auth_required' | 'guard_required' | 'email_required' | 'confirmation_required' | 'qr_required' | 'error';
+export type AuthStatus = 'authenticated' | 'authenticating' | 'auth_required' | 'guard_required' | 'email_required' | 'confirmation_required' | 'qr_required' | 'error';
 export interface SteamQrLoginState { status: AuthStatus; qrCode: string | null; updatedAt: string | null }
 export type ProgressListener = (progress: DownloadProgress) => void;
 

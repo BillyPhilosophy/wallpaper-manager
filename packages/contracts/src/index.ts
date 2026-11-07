@@ -7,7 +7,7 @@ export type WallpaperType = typeof WALLPAPER_TYPES[number];
 export type ContentRating = typeof CONTENT_RATINGS[number];
 export type WallpaperStatus = typeof WALLPAPER_STATUSES[number];
 export type DownloadStatus = typeof DOWNLOAD_STATUSES[number];
-export type SteamAuthStatus = 'authenticated' | 'auth_required' | 'guard_required' | 'email_required' | 'confirmation_required' | 'qr_required' | 'error';
+export type SteamAuthStatus = 'authenticated' | 'authenticating' | 'auth_required' | 'guard_required' | 'email_required' | 'confirmation_required' | 'qr_required' | 'error';
 export interface SteamQrLoginState { status: SteamAuthStatus; qrCode: string | null; updatedAt: string | null }
 export type ErrorCode = 'STEAM_AUTH_REQUIRED' | 'STEAM_GUARD_REQUIRED' | 'STEAM_RATE_LIMITED' | 'STEAM_DOWNLOAD_FAILED' | 'DOWNLOAD_TIMEOUT' | 'DISK_FULL' | 'WORKSHOP_ITEM_NOT_FOUND' | 'UNSUPPORTED_TYPE' | 'INVALID_PROJECT' | 'RESOURCE_MISSING' | 'PATH_UNSAFE' | 'PUBLISH_CONFLICT' | 'CANCELLED' | 'INTERNAL_ERROR' | 'NOT_FOUND' | 'CONFLICT' | 'BAD_REQUEST' | 'STEAM_API_UNAVAILABLE' | 'STEAM_ID_REQUIRED';
 

@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SteamNetworkController } from './index';
+import { networkErrorCode, SteamNetworkController } from './index';
 
 function ok() { return new Response('{}', { status: 200 }); }
 function route(call: unknown[]): string { return (call[1] as { dispatcher: { constructor: { name: string } } }).dispatcher.constructor.name; }
@@ -103,6 +103,24 @@ describe('Steam network modes', () => {
     } finally {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('prefers a causal error code and logs no request or credential details', async () => {
+    const error = Object.assign(new TypeError('fetch failed for https://example.test?token=secret'), {
+      cause: Object.assign(new Error('password=secret'), { code: 'ECONNREFUSED' }),
+    });
+    expect(networkErrorCode(error)).toBe('ECONNREFUSED');
+    vi.stubEnv('STEAM_NETWORK_MODE', 'direct');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const network = new SteamNetworkController(vi.fn().mockRejectedValue(error));
+      await expect(network.fetchSteam('https://example.test?token=secret')).rejects.toThrow('STEAM_NETWORK_UNAVAILABLE');
+      expect(warn).toHaveBeenCalledWith('[steam-network] route=direct code=ECONNREFUSED');
+      const logs = warn.mock.calls.flat().join(' ');
+      for (const secret of ['example.test', 'password', 'secret', 'token']) expect(logs).not.toContain(secret);
+    } finally {
+      warn.mockRestore();
     }
   });
 });

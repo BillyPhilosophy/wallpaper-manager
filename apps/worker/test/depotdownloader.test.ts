@@ -211,6 +211,30 @@ describe('DepotDownloader authentication', () => {
     }
   });
 
+  it('reports the actual QR process failure without logging its raw output', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'wallpaper-manager-depot-'));
+    const depot = new FakeProcess();
+    vi.mocked(spawn).mockImplementation(() => depot.asChild());
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const steam = new DepotDownloaderClient('depotdownloader', path.join(root, 'config'), 1000, new SteamGuardClient('steamguard', path.join(root, 'missing')));
+    try {
+      await steam.startQrLogin();
+      depot.output('connection failed for https://user:password@example.test token=secret\nUse the Steam Mobile App to sign in with this QR code:\n██ PRIVATE\n', true);
+      depot.close(1);
+      await vi.waitFor(() => expect(steam.status).toBe('error'));
+      expect(warn).toHaveBeenCalledWith('[steam] DepotDownloader exited mode=qr code=1 reason=STEAM_NETWORK_UNAVAILABLE');
+      expect(log).toHaveBeenCalledWith('[steam] status=error message=无法连接 Steam，请检查直连或代理线路');
+      const logs = [...log.mock.calls, ...warn.mock.calls].flat().join(' ');
+      for (const secret of ['password', 'secret', 'example.test', '██ PRIVATE']) expect(logs).not.toContain(secret);
+    } finally {
+      await steam.close();
+      await rm(root, { recursive: true, force: true });
+      log.mockRestore();
+      warn.mockRestore();
+    }
+  });
+
   it('keeps a saved subscription SteamID64 across QR login and logout', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'wallpaper-manager-depot-'));
     const depot = new FakeProcess();

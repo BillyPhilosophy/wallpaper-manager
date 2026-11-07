@@ -57,7 +57,7 @@ export function SettingsPage() {
         <form onSubmit={submit}>
           <label>Steam 用户名<input autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required/></label>
           <label>密码<input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required/></label>
-          <button disabled={busy || auth.data?.status === 'qr_required'}>账号密码登录</button>
+          <button disabled={busy || ['qr_required', 'authenticating'].includes(auth.data?.status || '')}>账号密码登录</button>
         </form>
         {['guard_required', 'email_required'].includes(auth.data?.status || '') && <form onSubmit={guard}><label>{auth.data?.status === 'email_required' ? '邮箱验证码' : '手机令牌码（Steam Guard）'}<input autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} required/></label><button disabled={busy}>提交验证码</button></form>}
         <button className="text-button" onClick={() => void post('/steam/auth/logout').then(auth.reload)}>{auth.data?.status === 'qr_required' ? '取消扫码' : '退出 Steam 会话'}</button>
@@ -75,5 +75,5 @@ export function SettingsPage() {
     </div>
   </section>;
 }
-function authLabel(status?: string) { return ({ authenticated: '已认证', auth_required: '需要登录', guard_required: '需要手机令牌码', email_required: '需要邮箱验证码', confirmation_required: '等待手机确认', qr_required: '等待手机扫码', error: '登录错误' } as Record<string, string>)[status || ''] || '读取中'; }
+function authLabel(status?: string) { return ({ authenticated: '已认证', authenticating: '正在连接 Steam', auth_required: '需要登录', guard_required: '需要手机令牌码', email_required: '需要邮箱验证码', confirmation_required: '等待手机确认', qr_required: '等待手机扫码', error: '登录错误' } as Record<string, string>)[status || ''] || '读取中'; }
 function syncLabel(sync?: SyncState | null) { return sync?.status === 'running' ? '同步中' : sync?.status === 'succeeded' ? `成功，共 ${sync.total} 项` : sync?.status === 'failed' ? sync.message || '同步失败' : '尚未同步'; }
