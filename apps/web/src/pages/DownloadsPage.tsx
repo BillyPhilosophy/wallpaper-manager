@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Page, DownloadJob } from '@wallpaper-manager/contracts';
 import { api, post, statusLabel } from '../api';
@@ -6,9 +7,23 @@ const active = ['queued', 'downloading', 'verifying', 'publishing'];
 
 export function DownloadsPage() {
   const { data, reload } = useRemote<Page<DownloadJob>>(() => api('/downloads?page=1&pageSize=50'), [], 2500);
-  const action = async (job: DownloadJob, name: 'cancel' | 'retry') => { await post(`/downloads/${job.id}/${name}`); reload(); };
+  const [busy, setBusy] = useState('');
+  const [message, setMessage] = useState('');
+  const perform = async (key: string, task: () => Promise<unknown>) => {
+    setBusy(key); setMessage('');
+    try { await task(); reload(); }
+    catch (error) { setMessage(error instanceof Error ? error.message : '操作失败'); }
+    finally { setBusy(''); }
+  };
+  const action = (job: DownloadJob, name: 'cancel' | 'retry') => perform(job.id, () => post(`/downloads/${job.id}/${name}`));
+  const remove = (job: DownloadJob) => perform(job.id, () => api(`/downloads/${job.id}`, { method: 'DELETE' }));
+  const clearFailed = () => {
+    if (confirm('确定删除所有失败的下载记录？此操作不会删除已下载壁纸。')) void perform('clear-failed', () => api('/downloads/failed', { method: 'DELETE' }));
+  };
+  const hasFailed = data?.items.some((job) => job.status === 'failed') || false;
   return <section>
-    <div className="page-heading"><div><p className="eyebrow">TRANSFER ACTIVITY</p><h1>下载中心</h1><p>显示上游返回的真实字节进度、占比和平均速率。</p></div></div>
+    <div className="page-heading"><div><p className="eyebrow">TRANSFER ACTIVITY</p><h1>下载中心</h1><p>显示上游返回的真实字节进度、占比和平均速率。</p></div><button className="danger" disabled={!hasFailed || busy === 'clear-failed'} onClick={clearFailed}>清空失败记录</button></div>
+    {message && <p className="error-text" role="alert">{message}</p>}
     <div className="job-list">{data?.items.map((job) => <article className="job" key={job.id}>
       <div><Link to={`/wallpaper/${job.workshopId}`}>工坊 {job.workshopId}</Link><small>{job.id} · 第 {job.attempt} 次尝试</small></div>
       <span className={`status ${job.status}`}>{statusLabel[job.status]}</span>
@@ -20,7 +35,7 @@ export function DownloadsPage() {
           {Number(job.progress.totalBytes) > 0 && <small>{formatBytes(job.progress.downloadedBytes)} / {formatBytes(job.progress.totalBytes)}</small>}
         </div>}
       </div>
-      <div>{active.includes(job.status) && <button className="secondary" onClick={() => void action(job, 'cancel')}>取消</button>}{['failed', 'cancelled'].includes(job.status) && <button className="secondary" onClick={() => void action(job, 'retry')}>重试</button>}</div>
+      <div className="job-actions">{active.includes(job.status) && <button className="secondary" disabled={busy === job.id} onClick={() => void action(job, 'cancel')}>取消</button>}{['failed', 'cancelled'].includes(job.status) && <button className="secondary" disabled={busy === job.id} onClick={() => void action(job, 'retry')}>重试</button>}{job.status === 'failed' && <button className="danger" disabled={busy === job.id} onClick={() => void remove(job)}>删除记录</button>}</div>
     </article>)}</div>
     {data && !data.items.length && <div className="empty-state">暂无下载任务。去工坊搜索一张喜欢的壁纸吧。</div>}
   </section>;

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { PreviewDescriptor, Wallpaper, WorkshopItem } from '@wallpaper-manager/contracts';
 import { api, post, statusLabel, typeLabel } from '../api';
@@ -7,6 +7,16 @@ import { OfficialPreview } from '../components/OfficialPreview';
 import { LivePreview } from '../features/live-preview/LivePreview';
 export function DetailPage() {
   const { workshopId = '' } = useParams(); const [live, setLive] = useState(false);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [immersive, setImmersive] = useState(false);
+  useEffect(() => {
+    const changed = () => setFullscreen(document.fullscreenElement === previewRef.current);
+    const keyboard = (event: KeyboardEvent) => { if (event.key === 'Escape') setImmersive(false); };
+    document.addEventListener('fullscreenchange', changed);
+    document.addEventListener('keydown', keyboard);
+    return () => { document.removeEventListener('fullscreenchange', changed); document.removeEventListener('keydown', keyboard); };
+  }, []);
   const remote = useRemote<WorkshopItem>(() => api(`/workshop/items/${workshopId}`), [workshopId]);
   const local = useRemote<Wallpaper>(() => api(`/wallpapers/${workshopId}`), [workshopId]);
   const descriptor = useRemote<PreviewDescriptor>(() => api(`/wallpapers/${workshopId}/preview-descriptor`), [workshopId, local.data?.status]);
@@ -14,6 +24,31 @@ export function DetailPage() {
   if (remote.error && !wallpaper) return <div className="error-state">{remote.error}</div>;
   if (!item && !wallpaper) return <div className="loading">正在读取工坊详情…</div>;
   const downloaded = wallpaper?.status === 'downloaded'; const title = wallpaper?.title || item?.title || workshopId;
+  const expanded = fullscreen || immersive;
+  const toggleFullscreen = async () => {
+    if (document.fullscreenElement) { await document.exitFullscreen(); return; }
+    if (immersive) { setImmersive(false); return; }
+    if (previewRef.current?.requestFullscreen) {
+      try { await previewRef.current.requestFullscreen(); return; } catch { }
+    }
+    setImmersive(true);
+  };
+  const toggleLive = () => {
+    if (live) {
+      setImmersive(false);
+      if (document.fullscreenElement === previewRef.current) void document.exitFullscreen().catch(() => undefined);
+    }
+    setLive(!live);
+  };
   const download = async () => { await post(`/wallpapers/${workshopId}/download`); local.reload(); descriptor.reload(); };
-  return <section><Link className="back-link" to="..">← 返回壁纸库</Link><div className="detail-layout"><div className="detail-preview">{live && descriptor.data && downloaded ? <LivePreview descriptor={descriptor.data}/> : <OfficialPreview url={wallpaper?.officialPreviewUrl || item?.officialPreviewUrl || null} title={title}/>}</div><div className="detail-copy"><p className="eyebrow">WORKSHOP {workshopId}</p><h1>{title}</h1><div className="badges"><span>{typeLabel[wallpaper?.type || item?.type || 'unknown']}</span><span>{statusLabel[wallpaper?.status || item?.localStatus || 'not_downloaded']}</span></div><p className="description">{wallpaper?.description || item?.description || '暂无描述'}</p>{downloaded ? <button onClick={() => setLive(!live)}>{live ? '查看官方预览' : '启动实时预览'}</button> : <button onClick={() => void download()}>下载到壁纸库</button>}{wallpaper?.fileSizeBytes && <p className="muted">本地大小 {(Number(wallpaper.fileSizeBytes) / 1024 / 1024).toFixed(1)} MB</p>}<details><summary>完整官方元数据</summary><pre>{JSON.stringify(wallpaper?.metadataJson || item?.metadataJson, null, 2)}</pre></details></div></div></section>;
+  return <section>
+    <Link className="back-link" to="..">← 返回壁纸库</Link>
+    <div className="detail-layout">
+      <div className={`detail-preview${immersive ? ' preview-immersive' : ''}`} ref={previewRef}>
+        {live && descriptor.data && downloaded ? <LivePreview descriptor={descriptor.data}/> : <OfficialPreview url={wallpaper?.officialPreviewUrl || item?.officialPreviewUrl || null} title={title}/>}
+        {live && downloaded && <button type="button" className="preview-fullscreen" aria-pressed={expanded} onClick={() => void toggleFullscreen()}>{expanded ? '退出全屏' : '全屏预览'}</button>}
+      </div>
+      <div className="detail-copy"><p className="eyebrow">WORKSHOP {workshopId}</p><h1>{title}</h1><div className="badges"><span>{typeLabel[wallpaper?.type || item?.type || 'unknown']}</span><span>{statusLabel[wallpaper?.status || item?.localStatus || 'not_downloaded']}</span></div><p className="description">{wallpaper?.description || item?.description || '暂无描述'}</p>{downloaded ? <button onClick={toggleLive}>{live ? '查看官方预览' : '启动实时预览'}</button> : <button onClick={() => void download()}>下载到壁纸库</button>}{wallpaper?.fileSizeBytes && <p className="muted">本地大小 {(Number(wallpaper.fileSizeBytes) / 1024 / 1024).toFixed(1)} MB</p>}<details><summary>完整官方元数据</summary><pre>{JSON.stringify(wallpaper?.metadataJson || item?.metadataJson, null, 2)}</pre></details></div>
+    </div>
+  </section>;
 }

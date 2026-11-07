@@ -159,6 +159,7 @@ export function previewDescriptor(workshopId: string, type: WallpaperType, entry
   if (!downloaded) return { ...fallback, mode: 'official-preview', degraded: false, message: '下载后可使用实时预览' };
   if (type === 'scene' && entry) return { ...fallback, mode: 'webwallgl', resourceBaseUrl: `/api/wallpapers/${workshopId}/resources`, entry, degraded: false, message: null };
   if (type === 'web' && entry) return { ...fallback, mode: 'web-sandbox', resourceBaseUrl: `/api/wallpapers/${workshopId}/resources`, entry, degraded: false, message: null };
+  if (type === 'video' && entry) return { ...fallback, mode: 'local-video', resourceBaseUrl: `/api/wallpapers/${workshopId}/resources`, entry, degraded: false, message: null };
   return { ...fallback, mode: 'official-preview', degraded: true, message: '该类型不支持浏览器实时预览' };
 }
 export function sanitizeError(error: unknown): { code: string; message: string } {

@@ -38,7 +38,7 @@ export interface WorkshopItem {
 export interface Page<T> { items: T[]; page: number; pageSize: number; total: number }
 export interface WorkshopSearchResult { items: WorkshopItem[]; cursor: string | null; total: number }
 export interface PreviewDescriptor {
-  workshopId: string; mode: 'webwallgl' | 'web-sandbox' | 'official-preview';
+  workshopId: string; mode: 'webwallgl' | 'web-sandbox' | 'local-video' | 'official-preview';
   type: WallpaperType; resourceBaseUrl?: string; entry?: string;
   fallbackPreviewUrl: string | null; degraded: boolean; message: string | null;
 }

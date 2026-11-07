@@ -61,6 +61,17 @@ export class WallpapersController {
   }
   @Get('downloads/:jobId')
   async job(@Param('jobId') id: string) { safeJobId(id); const job = await this.infra.db.downloadJob.findUnique({ where: { id } }); if (!job) throw new NotFoundException('任务不存在'); return serializeJob(job); }
+  @Delete('downloads/failed')
+  async clearFailedJobs() { const result = await this.infra.db.downloadJob.deleteMany({ where: { status: 'failed' } }); return { deleted: result.count }; }
+  @Delete('downloads/:jobId')
+  async removeJob(@Param('jobId') id: string) {
+    safeJobId(id);
+    const result = await this.infra.db.downloadJob.deleteMany({ where: { id, status: 'failed' } });
+    if (result.count) return { deleted: result.count };
+    const job = await this.infra.db.downloadJob.findUnique({ where: { id }, select: { id: true } });
+    if (!job) throw new NotFoundException('任务不存在');
+    throw new ConflictException('仅失败任务可删除');
+  }
   @Post('downloads/:jobId/cancel') @HttpCode(200)
   async cancel(@Param('jobId') id: string) {
     safeJobId(id); const job = await this.infra.db.downloadJob.findUnique({ where: { id } }); if (!job) throw new NotFoundException('任务不存在');

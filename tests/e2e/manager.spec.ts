@@ -59,6 +59,38 @@ test('download center displays upstream progress and rate', async ({ page }) => 
   await expect(page.getByText('1.0 MB/s', { exact: true })).toBeVisible();
   await expect(page.getByText('50.0 MB / 100.0 MB', { exact: true })).toBeVisible();
 });
+test('failed download records can be removed individually and cleared', async ({ page }) => {
+  const first = { id: '6f67e62b-8a27-4d2b-a77f-e42c67538e45', workshopId: '123', status: 'failed', attempt: 1, errorCode: 'STEAM_DOWNLOAD_FAILED', errorMessage: '下载失败', createdAt: new Date().toISOString(), startedAt: null, finishedAt: null };
+  const second = { ...first, id: 'b80e570f-9df2-4c44-9df2-8316dbac15f5', workshopId: '456' };
+  let jobs = [first, second];
+  await page.route('**/api/downloads?**', (route) => route.fulfill({ json: { items: jobs, page: 1, pageSize: 50, total: jobs.length } }));
+  await page.route(`**/api/downloads/${first.id}`, (route) => { jobs = jobs.filter((job) => job.id !== first.id); return route.fulfill({ json: { deleted: 1 } }); });
+  await page.route('**/api/downloads/failed', (route) => { jobs = []; return route.fulfill({ json: { deleted: 1 } }); });
+  await page.goto('/downloads');
+  await page.getByRole('button', { name: '删除记录', exact: true }).first().click();
+  await expect(page.getByRole('link', { name: '工坊 123' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: '工坊 456' })).toBeVisible();
+  page.once('dialog', (dialog) => void dialog.accept());
+  await page.getByRole('button', { name: '清空失败记录', exact: true }).click();
+  await expect(page.getByText('暂无下载任务。去工坊搜索一张喜欢的壁纸吧。')).toBeVisible();
+});
+test('downloaded video supports local playback and fullscreen preview', async ({ page }) => {
+  const video = { ...item, type: 'video', title: 'Local video', localStatus: 'downloaded' };
+  const local = { ...video, status: 'downloaded', subscribed: true, contentRating: 'everyone', localRelativePath: '123', fileSizeBytes: '1024', lastErrorCode: null, lastErrorMessage: null, downloadedAt: new Date().toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  await page.route('**/api/workshop/items/123', (route) => route.fulfill({ json: video }));
+  await page.route('**/api/wallpapers/123', (route) => route.fulfill({ json: local }));
+  await page.route('**/api/wallpapers/123/preview-descriptor', (route) => route.fulfill({ json: { workshopId: '123', mode: 'local-video', type: 'video', resourceBaseUrl: '/api/wallpapers/123/resources', entry: 'video.mp4', fallbackPreviewUrl: null, degraded: false, message: null } }));
+  await page.goto('/wallpaper/123');
+  await page.getByRole('button', { name: '启动实时预览', exact: true }).click();
+  const player = page.getByLabel('本地视频实时预览');
+  await expect(player).toBeVisible();
+  await expect(player).toHaveAttribute('src', '/api/wallpapers/123/resources/video.mp4');
+  await page.getByRole('button', { name: '全屏预览', exact: true }).click();
+  await expect(page.getByRole('button', { name: '退出全屏', exact: true })).toBeVisible();
+  expect(await page.evaluate(() => Boolean(document.fullscreenElement || document.querySelector('.preview-immersive')))).toBe(true);
+  await page.getByRole('button', { name: '退出全屏', exact: true }).click();
+  await expect(page.getByRole('button', { name: '全屏预览', exact: true })).toBeVisible();
+});
 test('downloaded unsupported type shows official fallback', async ({ page }) => {
   const local = { ...item, localStatus: 'downloaded', status: 'downloaded', metadataJson: {}, localRelativePath: '123', fileSizeBytes: '1024', lastErrorCode: null, lastErrorMessage: null, downloadedAt: new Date().toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), type: 'application' };
   await page.route('**/api/workshop/items/123', (route) => route.fulfill({ json: { ...item, type: 'application', localStatus: 'downloaded' } }));

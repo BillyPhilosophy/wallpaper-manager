@@ -43,5 +43,9 @@ describe('resource security', () => {
     await expect(resolveResourcePath(root, '123', 'escape')).rejects.toMatchObject({ code: 'PATH_UNSAFE' });
   });
 });
-it('creates supported and degraded descriptors', () => { expect(previewDescriptor('1', 'scene', 'scene.pkg', null, true).mode).toBe('webwallgl'); expect(previewDescriptor('1', 'application', null, null, true).degraded).toBe(true); });
+it('creates supported and degraded descriptors', () => {
+  expect(previewDescriptor('1', 'scene', 'scene.pkg', null, true).mode).toBe('webwallgl');
+  expect(previewDescriptor('1', 'video', 'video.mp4', null, true)).toMatchObject({ mode: 'local-video', resourceBaseUrl: '/api/wallpapers/1/resources', entry: 'video.mp4', degraded: false });
+  expect(previewDescriptor('1', 'application', null, null, true).degraded).toBe(true);
+});
 it('redacts secrets', () => { expect(sanitizeError(new WallpaperFileError('INVALID_PROJECT', 'password=hunter2')).message).not.toContain('hunter2'); });
