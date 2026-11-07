@@ -1,3 +1,5 @@
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SteamNetworkController } from './index';
 
@@ -73,5 +75,34 @@ describe('Steam network modes', () => {
     const proxy = await new SteamNetworkController().processEnv({ HOME: '/tmp' });
     expect(proxy.STEAM_PROXY_URL).toBe('http://proxy.test:7890');
     expect(proxy.HTTPS_PROXY).toBe('http://proxy.test:7890');
+  });
+
+  it('uses the same undici implementation for fetch and dispatchers in a real request', async () => {
+    vi.stubEnv('STEAM_NETWORK_MODE', 'direct');
+    const server = createServer((_request, response) => response.end('ok'));
+    try {
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+      const port = (server.address() as AddressInfo).port;
+      const response = await new SteamNetworkController().fetchSteam(`http://127.0.0.1:${port}/`);
+      expect(await response.text()).toBe('ok');
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('uses the matching undici fetch with a real proxy dispatcher', async () => {
+    const server = createServer((_request, response) => response.end('proxy'));
+    try {
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+      const port = (server.address() as AddressInfo).port;
+      vi.stubEnv('STEAM_NETWORK_MODE', 'proxy');
+      vi.stubEnv('STEAM_PROXY_URL', `http://127.0.0.1:${port}`);
+      const response = await new SteamNetworkController().fetchSteam('http://example.test/');
+      expect(await response.text()).toBe('proxy');
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 });

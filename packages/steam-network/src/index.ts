@@ -1,4 +1,4 @@
-import { Agent, ProxyAgent, type Dispatcher } from 'undici';
+import { Agent, ProxyAgent, fetch as undiciFetch, type Dispatcher } from 'undici';
 
 export type NetworkMode = 'direct' | 'proxy' | 'auto';
 export type NetworkRoute = 'direct' | 'proxy';
@@ -16,7 +16,7 @@ export class SteamNetworkController {
   private routeExpiresAt = 0;
   private pending: Promise<NetworkRoute> | null = null;
 
-  constructor(private readonly fetchImpl: Fetch = globalThis.fetch, private readonly probeTimeoutMs = 5000) {
+  constructor(private readonly fetchImpl: Fetch = undiciFetch as unknown as Fetch, private readonly probeTimeoutMs = 5000) {
     const configuredMode = process.env.STEAM_NETWORK_MODE as NetworkMode | '' | undefined;
     this.proxyUrl = process.env.STEAM_PROXY_URL || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || null;
     this.mode = configuredMode || (this.proxyUrl ? 'proxy' : 'direct');
