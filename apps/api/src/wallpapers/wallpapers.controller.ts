@@ -5,7 +5,7 @@ import path from 'node:path';
 import type { Request, Response } from 'express';
 import { ACTIVE_DOWNLOAD_STATUSES, CONTENT_RATINGS, WALLPAPER_STATUSES, WALLPAPER_TYPES, type DownloadProgress } from '@wallpaper-manager/contracts';
 import { assertWorkshopId, previewDescriptor, resolveResourcePath, safeJobId, wallpaperDirectory } from '@wallpaper-manager/wallpaper-files';
-import { Infrastructure, serializeJob, serializeWallpaper } from '../common';
+import { filterValues, Infrastructure, serializeJob, serializeWallpaper } from '../common';
 
 const mime: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.mp4': 'video/mp4', '.webm': 'video/webm', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.pkg': 'application/octet-stream', '.tex': 'application/octet-stream', '.wasm': 'application/wasm' };
 
@@ -134,8 +134,3 @@ export class WallpapersController {
   private async find(id: string) { assertWorkshopId(id); const item = await this.infra.db.wallpaper.findUnique({ where: { workshopId: id } }); if (!item) throw new NotFoundException('壁纸不存在'); return item; }
 }
 function positive(value: string, fallback: number): number { const n = Number(value); return Number.isInteger(n) && n > 0 ? n : fallback; }
-function filterValues(value: string, allowed: readonly string[], message: string): string[] {
-  const values = value ? value.split(',').filter(Boolean) : [];
-  if (values.some((entry) => !allowed.includes(entry))) throw new BadRequestException(message);
-  return values;
-}

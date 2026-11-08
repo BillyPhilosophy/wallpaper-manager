@@ -2,8 +2,10 @@ import { BadRequestException, Body, ConflictException, Controller, Get, HttpExce
 import { assertWorkshopId, contentRating } from '@wallpaper-manager/wallpaper-files';
 import type { ContentRating, WallpaperType, WorkshopItem } from '@wallpaper-manager/contracts';
 import type { SteamNetworkController } from '@wallpaper-manager/steam-network';
-import { Infrastructure } from '../common';
+import { filterValues, Infrastructure } from '../common';
 
+const SEARCH_TYPE_TAGS = { scene: 'Scene', web: 'Web', video: 'Video', image: 'Image', application: 'Application' } as const;
+const SEARCH_RATING_TAGS = { everyone: 'Everyone', pg13: 'PG13', mature: 'Mature' } as const;
 const cache = new Map<string, { expires: number; value: unknown }>();
 const recentRequests: number[] = [];
 let subscriptionSync: { status: 'idle' | 'running' | 'succeeded' | 'failed'; total: number; synced: number; message: string | null; updatedAt: string } = { status: 'idle', total: 0, synced: 0, message: null, updatedAt: new Date().toISOString() };
@@ -38,10 +40,13 @@ async function steamFetch(network: SteamNetworkController | undefined, url: stri
 export class WorkshopController {
   constructor(private readonly infra: Infrastructure) {}
   @Get('search')
-  async search(@Query('q') q = '', @Query('cursor') cursor = '*', @Query('pageSize') size = '20') {
+  async search(@Query('q') q = '', @Query('cursor') cursor = '*', @Query('pageSize') size = '20', @Query('type') type = '', @Query('rating') rating = '') {
     const pageSize = Math.min(Math.max(Number(size) || 20, 1), 50); const key = process.env.STEAM_WEB_API_KEY;
     if (!key) throw new ServiceUnavailableException({ code: 'STEAM_API_UNAVAILABLE', message: '未配置 Steam Web API Key' });
+    const types = filterValues(type, Object.keys(SEARCH_TYPE_TAGS), '无效类型').map((value) => SEARCH_TYPE_TAGS[value as keyof typeof SEARCH_TYPE_TAGS]);
+    const ratings = filterValues(rating, Object.keys(SEARCH_RATING_TAGS), '无效内容分级').map((value) => SEARCH_RATING_TAGS[value as keyof typeof SEARCH_RATING_TAGS]);
     const params = new URLSearchParams({ key, appid: '431960', query_type: '0', page: '1', numperpage: String(pageSize), cursor: cursor || '*', return_metadata: 'true', return_short_description: 'true', return_tags: 'true', search_text: q.slice(0, 200) });
+    [types, ratings].filter((tags) => tags.length).forEach((tags, group) => tags.forEach((tag, index) => params.set(`taggroups[${group}][tags][${index}]`, tag)));
     const body = await cached(`search:${params}`, () => steamFetch(this.infra.steamNetwork, `https://api.steampowered.com/IPublishedFileService/QueryFiles/v1/?${params}`));
     const details = body.response?.publishedfiledetails || []; const ids = details.map((entry: any) => String(entry.publishedfileid));
     const local = await this.infra.db.wallpaper.findMany({ where: { workshopId: { in: ids } } }); const states = new Map(local.map((entry) => [entry.workshopId, entry]));

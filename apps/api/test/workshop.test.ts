@@ -42,4 +42,28 @@ describe('Steam subscription synchronization', () => {
     await expect(controller.syncSubscriptions({ steamId: 'invalid' })).rejects.toMatchObject({ response: { code: 'BAD_REQUEST' } });
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it('maps search type and rating filters to upstream tag groups', async () => {
+    vi.stubEnv('STEAM_WEB_API_KEY', 'test-key');
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ response: { total: 1, next_cursor: 'next', publishedfiledetails: [{ publishedfileid: '123', title: 'Filtered scene', tags: [{ tag: 'Scene' }, { tag: 'Everyone' }] }] } })));
+    vi.stubGlobal('fetch', fetchMock);
+    const db = { wallpaper: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn().mockResolvedValue({ count: 0 }) } };
+    const result = await new WorkshopController({ db } as any).search('forest', '*', '20', 'scene,video', 'everyone,pg13');
+    const params = new URL(String(fetchMock.mock.calls[0][0])).searchParams;
+    expect(params.get('taggroups[0][tags][0]')).toBe('Scene');
+    expect(params.get('taggroups[0][tags][1]')).toBe('Video');
+    expect(params.get('taggroups[1][tags][0]')).toBe('Everyone');
+    expect(params.get('taggroups[1][tags][1]')).toBe('PG13');
+    expect(result.total).toBe(1);
+    expect(result.cursor).toBe('next');
+  });
+
+  it('rejects filters that cannot be represented by upstream tags', async () => {
+    vi.stubEnv('STEAM_WEB_API_KEY', 'test-key');
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const controller = new WorkshopController({ db: {} } as any);
+    await expect(controller.search('', '*', '20', 'unknown', '')).rejects.toMatchObject({ status: 400 });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

@@ -1,4 +1,4 @@
-import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Injectable, Logger, Module, OnModuleDestroy } from '@nestjs/common';
+import { ArgumentsHost, BadRequestException, Catch, ExceptionFilter, HttpException, HttpStatus, Injectable, Logger, Module, OnModuleDestroy } from '@nestjs/common';
 import { SteamNetworkController } from '@wallpaper-manager/steam-network';
 import { randomUUID } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
@@ -48,6 +48,11 @@ export class ApiExceptionFilter implements ExceptionFilter {
 }
 export function serializeWallpaper(item: any) { return { ...item, metadataJson: JSON.parse(item.metadataJson || '{}'), fileSizeBytes: item.fileSizeBytes?.toString() ?? null, createdAt: item.createdAt.toISOString(), updatedAt: item.updatedAt.toISOString(), downloadedAt: item.downloadedAt?.toISOString() ?? null }; }
 export function serializeJob(item: any) { const { activeWorkshopId: _internal, ...job } = item; return { ...job, createdAt: item.createdAt.toISOString(), startedAt: item.startedAt?.toISOString() ?? null, finishedAt: item.finishedAt?.toISOString() ?? null }; }
+export function filterValues(value: string, allowed: readonly string[], message: string): string[] {
+  const values = value ? value.split(',').filter(Boolean) : [];
+  if (values.some((entry) => !allowed.includes(entry))) throw new BadRequestException(message);
+  return values;
+}
 
 @Injectable()
 export class Infrastructure implements OnModuleDestroy {

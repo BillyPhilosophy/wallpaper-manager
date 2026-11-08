@@ -51,6 +51,36 @@ test('known SteamID64 can synchronize subscriptions without Steam login', async 
   await page.getByRole('button', { name: '同步订阅列表', exact: true }).click();
   await expect.poll(() => requestBody).toBe('{"steamId":"76561197960265851"}');
 });
+test('search filters are preserved without requesting again after navigation', async ({ page }) => {
+  const requests: string[] = [];
+  await page.route('**/api/workshop/search**', (route) => {
+    requests.push(route.request().url());
+    return route.fulfill({ json: { items: [item], cursor: null, total: 1 } });
+  });
+  await page.route('**/api/wallpapers?**', (route) => route.fulfill({ json: { items: [], page: 1, pageSize: 24, total: 0 } }));
+  await page.goto('/');
+  await expect.poll(() => requests.length).toBe(1);
+  await page.getByLabel('搜索工坊').fill('Aurora');
+  await page.getByRole('button', { name: '搜索', exact: true }).click();
+  await expect.poll(() => requests.length).toBe(2);
+  await page.locator('.filter-menu').filter({ hasText: '类型' }).locator('summary').click();
+  for (const label of ['网页', '视频', '图片', '应用']) await page.getByLabel(label, { exact: true }).uncheck();
+  await page.locator('.filter-menu').filter({ hasText: '内容分级' }).locator('summary').click();
+  for (const label of ['PG13', '成人']) await page.getByLabel(label, { exact: true }).uncheck();
+  await expect.poll(() => requests.length).toBe(3);
+  const params = new URL(requests[2]).searchParams;
+  expect(params.get('type')).toBe('scene');
+  expect(params.get('rating')).toBe('everyone');
+  await page.evaluate(() => { document.documentElement.style.minHeight = '2000px'; window.scrollTo(0, 500); });
+  expect(await page.evaluate(() => window.scrollY)).toBe(500);
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+  await page.getByRole('link', { name: '我的壁纸', exact: true }).click();
+  await page.getByRole('link', { name: '工坊搜索', exact: true }).click();
+  await expect(page.getByLabel('搜索工坊')).toHaveValue('Aurora');
+  await expect(page.getByText('Aurora Landscape')).toBeVisible();
+  expect(requests).toHaveLength(3);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(500);
+});
 test('download center displays upstream progress and rate', async ({ page }) => {
   const progress = { downloadedBytes: '50000000', totalBytes: '100000000', networkBytes: '25000000', bytesPerSecond: '1000000', percent: 50, updatedAt: new Date().toISOString() };
   await page.route('**/api/downloads?**', (route) => route.fulfill({ json: { items: [{ id: '6f67e62b-8a27-4d2b-a77f-e42c67538e45', workshopId: '123', status: 'downloading', attempt: 1, errorCode: null, errorMessage: null, createdAt: new Date().toISOString(), startedAt: null, finishedAt: null, progress }], page: 1, pageSize: 50, total: 1 } }));
