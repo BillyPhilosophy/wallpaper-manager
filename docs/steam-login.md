@@ -31,7 +31,7 @@ Worker 只在启动 steamguard-cli 时通过环境变量传递 passkey，不把�
 
 首次登录成功后，DepotDownloader 将持久 refresh token 保存在 `steam-config/depotdownloader` 的 .NET IsolatedStorage 中。后续下载和 Worker 重启会使用该会话，不保存账号密码；会话被撤销或过期后会转为 `auth_required`，不会无限重试认证。
 
-订阅同步只依赖 Web API Key 和 SteamID64，不需要 DepotDownloader 登录会话。可在“订阅同步”卡片直接填写 SteamID64，点击同步时会保存并复用；Worker 也可从 steamguard-cli 的 `manifest.json` 读取。账号名和 SteamID64 属于非秘密状态，会保存在 SQLite；密码和一次性 Guard 码不会保存。
+订阅同步只依赖 Web API Key 和 SteamID64，不需要 DepotDownloader 登录会话。可在独立的“订阅同步”页面直接填写 SteamID64，点击同步时会保存并复用；Worker 也可从 steamguard-cli 的 `manifest.json` 读取。账号名和 SteamID64 属于非秘密状态，会保存在 SQLite；密码和一次性 Guard 码不会保存。
 
 “退出 Steam 会话”会终止当前 DepotDownloader 进程并删除本地 refresh token，不会删除 steamguard-cli maFiles 或解除认证器。如需彻底撤销服务器端授权，还应在 Steam 账号的授权设备管理中撤销对应会话。
 

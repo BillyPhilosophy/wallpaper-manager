@@ -2,6 +2,7 @@
   "name": "wallpaper-manager",
   "version": "1.0.0",
   "private": true,
+  "license": "MIT",
   "packageManager": "pnpm@10.32.1",
   "engines": { "node": ">=22.12.0" },
   "scripts": {

@@ -12,7 +12,8 @@
 - 查看官方图片、动图、视频及完整元数据。
 - 默认使用 Steam 手机 App 扫码登录，也支持账密登录、steamguard-cli 自动令牌和手工 Guard。
 - 下载、取消、重试和删除壁纸，展示真实任务阶段、字节占比和平均下载速率；没有可靠数据时不伪造百分比。
-- 使用固定版本的 `webwallgl@3.0.0` 在线预览已下载的 Scene／Web 壁纸。
+- 使用固定版本的 `webwallgl@3.0.0` 在线预览已下载的 Scene／Web 壁纸，支持本地视频播放和全屏预览；引擎运行在隔离的沙箱 iframe 中。
+- 搜索支持类型、内容分级和排序；设置页默认过滤成人及未分级内容，可主动关闭。
 - 与 DSH 共用同一份原始工坊文件，下载后即可在 DSH 壁纸库中使用。
 - 通过暂存目录、资源校验和原子发布，避免网站或 DSH 读取半成品。
 - 阻止 Application／EXE 壁纸，不执行壁纸目录中的第三方程序。
@@ -56,6 +57,20 @@ Steam Web API Key 和 DepotDownloader 登录是两套独立配置。密码及 Gu
 同时生成 `sha-<完整提交哈希>` 标签用于回滚。Worker 使用原生 ARM64 的 DepotDownloader 和 steamguard-cli，不再需要 Box64 或 Pi 5 专用镜像。设备端 `deploy/.env` 中的 `DOCKERHUB_USERNAME` 必须与这里一致，否则 Compose 会拉取其他命名空间下的镜像。`STEAM_WEB_API_KEY` 只在设备端配置，不需要也不应添加到 GitHub Actions Secrets。
 
 另一个 `.github/workflows/ci.yml` 会在 push 和 Pull Request 时自动执行类型检查、单元测试、构建和 E2E 测试，不需要 Docker Hub Secrets；它与镜像发布工作流相互独立。
+
+### 获取 Steam Web API Key（必须）
+
+工坊搜索和订阅同步使用 Steam 官方 Web API。请先在 Steam 中注册一个 API Key：
+
+1. 打开 [Steam Web API Key 注册页面](https://steamcommunity.com/dev/apikey)。
+2. 登录 Steam，按页面要求填写域名并完成注册。
+3. 将生成的 Key 写入设备端的 `deploy/.env`：
+
+```env
+STEAM_WEB_API_KEY=替换为你自己的Key
+```
+
+Key 只需要配置在服务端，与扫码或账密登录无关，也不需要放入 GitHub Actions Secrets。不要将真实 Key 提交到 Git、写入前端代码或公开发送。若 Key 泄露，请及时更换。
 
 ### 2. 配置存储路径
 
@@ -160,6 +175,29 @@ DSH_WE_STEAM_ROOT=/srv/wallpaper-manager/steam-data
 
 下载完成后打开或刷新 DSH 壁纸库，由 `/wallpaper-engine/inventory` 请求触发清单重建。网站删除壁纸后，刷新 DSH 清单即可看到项目消失。
 
+## 日常使用引导
+
+### 登录与订阅
+
+- 打开“Steam 设置”，推荐使用 Steam 手机 App 扫码登录；也支持账密、手机确认和 Guard 流程。
+- 打开“订阅同步”，填写并保存 SteamID64 后即可同步订阅。该操作不要求 Steam 登录，也不会自动批量下载。
+- 自动手机令牌和 maFiles 的安全配置见 [Steam 登录与安全](docs/steam-login.md)。
+
+### 搜索与预览
+
+- 工坊搜索支持关键词、类型、内容分级和排序，支持输入页码跳转。
+- 默认开启内容过滤，只显示全年龄和 PG13，排除成人及未分级项目；可在“Steam 设置 → 搜索内容过滤”中关闭。
+- 搜索页会保存筛选、页码和滚动位置；搜索与壁纸库的筛选状态相互独立。
+- 已下载的 Scene/Web 可启动沙箱实时预览，视频可直接播放；预览区域支持全屏。
+
+### 下载与删除
+
+- 下载中心显示真实字节进度、占比和速率，支持取消、失败重试和历史记录分页。
+- 失败、已取消和已完成记录可以单项删除；失败记录和已完成记录也可分别清空。
+- 删除记录时默认只移除任务历史。勾选“同时删除本地源文件及所有关联记录”后，会展示受影响的壁纸，并通过 Worker 永久删除源文件和关联记录。
+- 从壁纸库删除已下载文件时，也会清理其关联任务；没有任务记录时仍可正常删除文件。
+- 源文件删除不可撤销，但不会取消 Steam 订阅。请提前备份重要文件。
+
 ## 数据目录
 
 以下目录均位于 `deploy/.env` 配置的 `WALLPAPER_DATA_ROOT` 下：
@@ -225,6 +263,21 @@ tests/                 fixtures、集成测试和 E2E 测试
 
 真实 Steam 登录、Guard、订阅同步、工坊下载、Scene 渲染，以及树莓派与 DSH 的完整联动仍需在目标设备验收。更详细的说明见：
 
-- `docs/deployment.md`
-- `docs/dsh-integration.md`
-- `docs/steam-login.md`
+- [部署指南](docs/deployment.md)
+- [DSH 接入](docs/dsh-integration.md)
+- [Steam 登录与安全](docs/steam-login.md)
+
+## 发布与变更记录
+
+版本变化记录在 [CHANGELOG.md](CHANGELOG.md)。发布新版本前，将 `Unreleased` 中的内容整理到新的版本号和日期下，同步更新 `package.json`，完成测试后再创建 Git 标签和 GitHub Release。镜像发布使用 GitHub Actions 中的手动 `build-images` 工作流。
+
+## 鸣谢
+
+- [dsh-wallpaper-engine](https://github.com/elysia395/dsh-wallpaper-engine)：为项目的 DSH 联动和壁纸管理体验提供了开发灵感。
+- [DepotDownloader](https://github.com/SteamRE/DepotDownloader)：提供 Steam 登录与工坊下载能力。
+- [steamguard-cli](https://github.com/dyc3/steamguard-cli)：提供可选的手机令牌自动化能力。
+- [WebWallGL](https://github.com/oneincase/webwallgl)：提供浏览器中的 Wallpaper Engine 场景渲染能力。
+
+## 许可证
+
+本项目使用 [MIT License](LICENSE)。使用或修改本项目时，请保留许可证中的版权与许可声明。
