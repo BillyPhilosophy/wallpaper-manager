@@ -4,7 +4,7 @@ import { api, post } from '../api';
 import { useRemote } from '../hooks';
 import { MultiSelectFilter } from '../components/MultiSelectFilter';
 import { WallpaperCard } from '../components/WallpaperCard';
-import { cachedSearch, invalidateSearch, ratingOptions, saveSearchSession, searchKey, searchSession, typeOptions, type SearchRating, type SearchType } from '../features/search/session';
+import { cachedSearch, invalidateSearch, ratingOptions, saveSearchSession, searchKey, searchSession, sortOptions, typeOptions, type SearchRating, type SearchSort, type SearchType } from '../features/search/session';
 
 export function SearchPage() {
   const [input, setInput] = useState(searchSession.input);
@@ -12,19 +12,20 @@ export function SearchPage() {
   const [page, setPage] = useState(searchSession.page);
   const [types, setTypes] = useState<SearchType[]>(searchSession.types);
   const [ratings, setRatings] = useState<SearchRating[]>(searchSession.ratings);
+  const [sort, setSort] = useState<SearchSort>(searchSession.sort);
   const [busy, setBusy] = useState('');
   const [pageInput, setPageInput] = useState(String(page));
   const [pageError, setPageError] = useState('');
-  const key = searchKey(query, page, types, ratings);
+  const key = searchKey(query, page, types, ratings, sort);
   const [requestKey, setRequestKey] = useState(key);
   useEffect(() => {
     const timer = window.setTimeout(() => setRequestKey(key), 300);
     return () => window.clearTimeout(timer);
   }, [key]);
-  const [requestedQuery, requestedPage, requestedTypes, requestedRatings] = JSON.parse(requestKey) as [string, number, SearchType[], SearchRating[]];
+  const [requestedQuery, requestedPage, requestedTypes, requestedRatings, requestedSort] = JSON.parse(requestKey) as [string, number, SearchType[], SearchRating[], SearchSort];
   const { data, error, loading, reload } = useRemote<WorkshopSearchResult>(() => {
     if (!requestedTypes.length || !requestedRatings.length) return Promise.resolve({ items: [], cursor: null, total: 0 });
-    const params = new URLSearchParams({ q: requestedQuery, page: String(requestedPage), pageSize: '20' });
+    const params = new URLSearchParams({ q: requestedQuery, page: String(requestedPage), pageSize: '20', sort: requestedSort });
     if (requestedTypes.length < typeOptions.length) params.set('type', requestedTypes.join(','));
     if (requestedRatings.length < ratingOptions.length) params.set('rating', requestedRatings.join(','));
     return cachedSearch(requestKey, () => api(`/workshop/search?${params}`));
@@ -55,7 +56,7 @@ export function SearchPage() {
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const nextQuery = input.trim();
-    const nextKey = searchKey(nextQuery, 1, types, ratings);
+    const nextKey = searchKey(nextQuery, 1, types, ratings, sort);
     searchSession.query = nextQuery; searchSession.page = 1; saveSearchSession();
     if (nextKey === requestKey) refresh();
     setRequestKey(nextKey); setPage(1); setQuery(nextQuery);
@@ -66,14 +67,15 @@ export function SearchPage() {
     if (next === page) { setPageInput(String(next)); return; }
     window.scrollTo(0, 0);
     searchSession.page = next; saveSearchSession();
-    setPage(next); setRequestKey(searchKey(query, next, types, ratings));
+    setPage(next); setRequestKey(searchKey(query, next, types, ratings, sort));
   };
   const changeTypes = (values: SearchType[]) => { searchSession.types = values; searchSession.page = 1; saveSearchSession(); setTypes(values); setPage(1); };
   const changeRatings = (values: SearchRating[]) => { searchSession.ratings = values; searchSession.page = 1; saveSearchSession(); setRatings(values); setPage(1); };
+  const changeSort = (value: SearchSort) => { searchSession.sort = value; searchSession.page = 1; saveSearchSession(); setSort(value); setPage(1); };
   return <section aria-busy={loading}>
     <div className="page-heading"><div><p className="eyebrow">STEAM WORKSHOP</p><h1>发现下一张壁纸</h1><p>搜索官方创意工坊，将原始文件安全发布到共享壁纸库。</p></div></div>
     <form className="search-bar" onSubmit={submit}><input value={input} onChange={(event) => { searchSession.input = event.target.value; saveSearchSession(); setInput(event.target.value); }} placeholder="搜索壁纸、场景或艺术家…" aria-label="搜索工坊"/><button>搜索</button></form>
-    <div className="filters"><MultiSelectFilter label="类型" options={typeOptions} selected={types} onChange={changeTypes}/><MultiSelectFilter label="内容分级" options={ratingOptions} selected={ratings} onChange={changeRatings}/></div>
+    <div className="filters"><MultiSelectFilter label="类型" options={typeOptions} selected={types} onChange={changeTypes}/><MultiSelectFilter label="内容分级" options={ratingOptions} selected={ratings} onChange={changeRatings}/><select aria-label="排序方式" value={sort} onChange={(event) => changeSort(event.target.value as SearchSort)}>{sortOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
     {error && <div className="error-state">{error}<button className="text-button" onClick={refresh}>重试</button></div>}
     {loading && data && <div className="inline-loading" role="status">正在更新搜索结果…</div>}
     {loading && !data ? <div className="loading" role="status">正在连接 Steam 创意工坊…</div> : <div className={`wallpaper-grid${loading ? ' is-loading' : ''}`}>{data?.items.map((item) => <WallpaperCard key={item.workshopId} item={item} action={item.localStatus === 'not_downloaded' ? <button disabled={busy === item.workshopId} onClick={() => void download(item.workshopId)}>{busy === item.workshopId ? '正在入队' : '下载'}</button> : null}/>)}</div>}

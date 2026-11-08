@@ -4,20 +4,16 @@ import { api, post } from '../api';
 import { useRemote } from '../hooks';
 import { AsciiQrCode } from '../components/AsciiQrCode';
 
-type SyncState = { status: 'idle' | 'running' | 'succeeded' | 'failed'; total: number; synced: number; message: string | null; updatedAt: string };
-
 export function SettingsPage() {
   const capabilities = useRemote<Capabilities & { steamApiKeyConfigured: boolean }>(() => api('/system/capabilities'), [], 5000);
   const auth = useRemote<SteamAuthState>(() => api('/steam/auth/status'), [], 2500);
   const qr = useRemote<SteamQrLoginState>(() => api('/steam/auth/qr'), [auth.data?.status], auth.data?.status === 'qr_required' ? 750 : 0);
-  const sync = useRemote<SyncState>(() => api('/workshop/subscriptions/sync'), [], 2500);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [steamId, setSteamId] = useState('');
   const [code, setCode] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
-  const [syncBusy, setSyncBusy] = useState(false);
   useEffect(() => { if (auth.data?.steamId) setSteamId(auth.data.steamId); }, [auth.data?.steamId]);
   const startQr = async () => {
     setBusy(true); setMessage('');
@@ -37,7 +33,6 @@ export function SettingsPage() {
     catch (error) { setMessage(error instanceof Error ? error.message : '登录失败'); }
     finally { setBusy(false); }
   };
-  const synchronize = async () => { setSyncBusy(true); setMessage(''); try { await post('/workshop/subscriptions/sync', steamId.trim() ? { steamId: steamId.trim() } : {}); sync.reload(); auth.reload(); } catch (error) { setMessage(error instanceof Error ? error.message : '同步失败'); } finally { setSyncBusy(false); } };
   return <section>
     <div className="page-heading"><div><p className="eyebrow">SYSTEM & STEAM</p><h1>设置</h1><p>管理 Steam 会话。扫码登录不需要密码；账密登录的密码仅用于当前请求。</p></div></div>
     <div className="settings-grid">
@@ -63,17 +58,7 @@ export function SettingsPage() {
         <button className="text-button" onClick={() => void post('/steam/auth/logout').then(auth.reload)}>{auth.data?.status === 'qr_required' ? '取消扫码' : '退出 Steam 会话'}</button>
         {message && <p className="error-text">{message}</p>}
       </article>
-      <article className="settings-card">
-        <h2>订阅同步</h2>
-        <p>将 Wallpaper Engine 订阅项目加入网站，不会自动下载。已知 SteamID64 时无需登录 Steam。</p>
-        <label>SteamID64<input inputMode="numeric" autoComplete="off" value={steamId} onChange={(e) => setSteamId(e.target.value)} placeholder="填写后同步并保存；留空使用已保存值"/></label>
-        <div className="setting-row"><span>同步状态</span><strong>{syncLabel(sync.data)}</strong></div>
-        {sync.data?.status === 'running' && <p>已处理 {sync.data.synced} / {sync.data.total || '…'} 项</p>}
-        <p>最近同步：{new Date(sync.data?.updatedAt || '').toLocaleString()}</p>
-        <button disabled={syncBusy || sync.data?.status === 'running'} onClick={synchronize}>同步订阅列表</button>
-      </article>
     </div>
   </section>;
 }
 function authLabel(status?: string) { return ({ authenticated: '已认证', authenticating: '正在连接 Steam', auth_required: '需要登录', guard_required: '需要手机令牌码', email_required: '需要邮箱验证码', confirmation_required: '等待手机确认', qr_required: '等待手机扫码', error: '登录错误' } as Record<string, string>)[status || ''] || '读取中'; }
-function syncLabel(sync?: SyncState | null) { return sync?.status === 'running' ? '同步中' : sync?.status === 'succeeded' ? `成功，共 ${sync.total} 项` : sync?.status === 'failed' ? sync.message || '同步失败' : '尚未同步'; }

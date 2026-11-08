@@ -39,14 +39,13 @@ test('device confirmation does not require a verification code', async ({ page }
 test('known SteamID64 can synchronize subscriptions without Steam login', async ({ page }) => {
   let requestBody = '';
   await page.route('**/api/steam/auth/status', (route) => route.fulfill({ json: { status: 'auth_required', message: null, accountName: null, steamId: null, updatedAt: new Date().toISOString() } }));
-  await page.route('**/api/steam/auth/qr', (route) => route.fulfill({ json: { status: 'auth_required', qrCode: null, updatedAt: null } }));
-  await page.route('**/api/system/capabilities', (route) => route.fulfill({ json: { workerReady: true, steamAuthenticated: false, steamApiKeyConfigured: true, livePreviewTypes: ['scene', 'web'], webwallglVersion: '3.0.0' } }));
   await page.route('**/api/workshop/subscriptions/sync', (route) => {
     const running = route.request().method() === 'POST';
     if (running) requestBody = route.request().postData() || '';
     return route.fulfill({ json: { status: running ? 'running' : 'idle', total: 0, synced: 0, message: null, updatedAt: new Date().toISOString() } });
   });
-  await page.goto('/settings');
+  await page.route('**/api/wallpapers?**', (route) => route.fulfill({ json: { items: [], page: 1, pageSize: 24, total: 0 } }));
+  await page.goto('/subscriptions');
   await page.getByLabel('SteamID64', { exact: true }).fill('76561197960265851');
   await page.getByRole('button', { name: '同步订阅列表', exact: true }).click();
   await expect.poll(() => requestBody).toBe('{"steamId":"76561197960265851"}');
@@ -67,10 +66,12 @@ test('search filters, page jumps and scroll position are preserved without anoth
   for (const label of ['网页', '视频', '图片', '应用']) await page.getByLabel(label, { exact: true }).uncheck();
   await page.locator('.filter-menu').filter({ hasText: '内容分级' }).locator('summary').click();
   for (const label of ['PG13', '成人']) await page.getByLabel(label, { exact: true }).uncheck();
+  await page.getByLabel('排序方式', { exact: true }).selectOption('subscriptions');
   await expect.poll(() => requests.length).toBe(3);
   const params = new URL(requests[2]).searchParams;
   expect(params.get('type')).toBe('scene');
   expect(params.get('rating')).toBe('everyone');
+  expect(params.get('sort')).toBe('subscriptions');
   await page.evaluate(() => { document.documentElement.style.minHeight = '2000px'; window.scrollTo(0, 500); });
   await page.getByLabel('页码', { exact: true }).fill('2');
   await page.getByRole('button', { name: '跳转', exact: true }).click();

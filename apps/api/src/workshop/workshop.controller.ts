@@ -6,6 +6,7 @@ import { filterValues, Infrastructure } from '../common';
 
 const SEARCH_TYPE_TAGS = { scene: 'Scene', web: 'Web', video: 'Video', image: 'Image', application: 'Application' } as const;
 const SEARCH_RATING_TAGS = { everyone: 'Everyone', pg13: 'PG13', mature: 'Mature' } as const;
+const SEARCH_SORTS = { vote: { queryType: 0 }, year: { queryType: 3, days: 365 }, month: { queryType: 3, days: 30 }, week: { queryType: 3, days: 7 }, day: { queryType: 3, days: 1 }, recent: { queryType: 1 }, votes: { queryType: 6 }, subscriptions: { queryType: 9 } } as const;
 const cache = new Map<string, { expires: number; value: unknown }>();
 const recentRequests: number[] = [];
 let subscriptionSync: { status: 'idle' | 'running' | 'succeeded' | 'failed'; total: number; synced: number; message: string | null; updatedAt: string } = { status: 'idle', total: 0, synced: 0, message: null, updatedAt: new Date().toISOString() };
@@ -40,14 +41,18 @@ async function steamFetch(network: SteamNetworkController | undefined, url: stri
 export class WorkshopController {
   constructor(private readonly infra: Infrastructure) {}
   @Get('search')
-  async search(@Query('q') q = '', @Query('page') pageValue = '1', @Query('pageSize') size = '20', @Query('type') type = '', @Query('rating') rating = '') {
+  async search(@Query('q') q = '', @Query('page') pageValue = '1', @Query('pageSize') size = '20', @Query('type') type = '', @Query('rating') rating = '', @Query('sort') sort = 'vote') {
     const pageSize = Math.min(Math.max(Number(size) || 20, 1), 50); const key = process.env.STEAM_WEB_API_KEY;
     const page = Math.min(Math.max(Math.trunc(Number(pageValue)) || 1, 1), 1000);
     if (!key) throw new ServiceUnavailableException({ code: 'STEAM_API_UNAVAILABLE', message: '未配置 Steam Web API Key' });
+    if (!Object.hasOwn(SEARCH_SORTS, sort)) throw new BadRequestException('无效排序方式');
+    const order = SEARCH_SORTS[sort as keyof typeof SEARCH_SORTS];
     const types = filterValues(type, Object.keys(SEARCH_TYPE_TAGS), '无效类型').map((value) => SEARCH_TYPE_TAGS[value as keyof typeof SEARCH_TYPE_TAGS]);
     const ratings = filterValues(rating, Object.keys(SEARCH_RATING_TAGS), '无效内容分级').map((value) => SEARCH_RATING_TAGS[value as keyof typeof SEARCH_RATING_TAGS]);
-    const params = new URLSearchParams({ key, appid: '431960', query_type: '0', page: String(page), numperpage: String(pageSize), return_metadata: 'true', return_short_description: 'true', return_tags: 'true', search_text: q.slice(0, 200) });
-    [types, ratings].filter((tags) => tags.length).forEach((tags, group) => tags.forEach((tag, index) => params.set(`taggroups[${group}][tags][${index}]`, tag)));
+    const params = new URLSearchParams({ key, appid: '431960', query_type: String(order.queryType), page: String(page), numperpage: String(pageSize), match_all_tags: 'false', return_metadata: 'true', return_short_description: 'true', return_tags: 'true', search_text: q.slice(0, 200) });
+    if ('days' in order) params.set('days', String(order.days));
+    types.forEach((tag, index) => params.set(`requiredtags[${index}]`, tag));
+    ratings.forEach((tag, index) => params.set(`taggroups[0][tags][${index}]`, tag));
     const body = await cached(`search:${params}`, () => steamFetch(this.infra.steamNetwork, `https://api.steampowered.com/IPublishedFileService/QueryFiles/v1/?${params}`));
     const details = body.response?.publishedfiledetails || []; const ids = details.map((entry: any) => String(entry.publishedfileid));
     const local = await this.infra.db.wallpaper.findMany({ where: { workshopId: { in: ids } } }); const states = new Map(local.map((entry) => [entry.workshopId, entry]));
@@ -86,9 +91,18 @@ export class WorkshopController {
     return subscriptionSync;
   }
   private async performSubscriptionSync(key: string, steamId: string) {
-    const params = new URLSearchParams({ key, steamid: steamId, appid: '431960' });
-    const body = await steamFetch(this.infra.steamNetwork, `https://api.steampowered.com/ISteamRemoteStorage/EnumerateUserSubscribedFiles/v1/?${params}`);
-    const ids: string[] = (body.response?.publishedfileids || []).map((entry: any) => String(entry.publishedfileid || entry));
+    const ids: string[] = [];
+    let page = 1; let total = 0; let count = 0;
+    do {
+      if (page > 1) await new Promise((resolve) => setTimeout(resolve, 300));
+      const params = new URLSearchParams({ key, steamid: steamId, appid: '431960', type: 'mysubscriptions', page: String(page), numperpage: '100', ids_only: 'true' });
+      const body = await steamFetch(this.infra.steamNetwork, `https://api.steampowered.com/IPublishedFileService/GetUserFiles/v1/?${params}`);
+      const details = body.response?.publishedfiledetails || [];
+      count = details.length;
+      ids.push(...details.map((entry: any) => String(entry.publishedfileid || entry)));
+      total = Number(body.response?.total || ids.length);
+      page++;
+    } while (count > 0 && ids.length < total);
     subscriptionSync = { ...subscriptionSync, total: ids.length, updatedAt: new Date().toISOString() };
     console.log(`[subscriptions] received total=${ids.length}`);
     for (let offset = 0; offset < ids.length; offset += 100) {
