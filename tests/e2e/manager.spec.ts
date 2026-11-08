@@ -27,6 +27,23 @@ test('QR login is the default Steam sign-in action', async ({ page }) => {
   expect(await qr.evaluate((element) => (element as HTMLCanvasElement).width)).toBeGreaterThan(0);
   await expect(page.getByText('等待手机扫码')).toBeVisible();
 });
+test('content filtering defaults on and can be disabled in settings', async ({ page }) => {
+  const requests: string[] = [];
+  await page.route('**/api/workshop/search**', (route) => { requests.push(route.request().url()); return route.fulfill({ json: { items: [], cursor: null, total: 0 } }); });
+  await page.route('**/api/system/capabilities', (route) => route.fulfill({ json: { workerReady: true, steamAuthenticated: false, steamApiKeyConfigured: true, livePreviewTypes: ['scene', 'web'], webwallglVersion: '3.0.0' } }));
+  await page.route('**/api/steam/auth/status', (route) => route.fulfill({ json: { status: 'auth_required', message: null, accountName: null, steamId: null, updatedAt: new Date().toISOString() } }));
+  await page.goto('/');
+  await expect.poll(() => requests.length).toBe(1);
+  expect(new URL(requests[0]).searchParams.get('rating')).toBe('everyone,pg13');
+  await page.getByRole('link', { name: 'Steam 设置', exact: true }).click();
+  const toggle = page.getByRole('switch', { name: '过滤成人和未分级内容' });
+  await expect(toggle).toBeChecked();
+  await toggle.uncheck();
+  await page.getByRole('link', { name: '工坊搜索', exact: true }).click();
+  await expect.poll(() => requests.length).toBe(2);
+  expect(new URL(requests[1]).searchParams.has('rating')).toBe(false);
+  expect(await page.evaluate(() => localStorage.getItem('wallpaper-content-filter'))).toBe('false');
+});
 test('device confirmation does not require a verification code', async ({ page }) => {
   await page.route('**/api/steam/auth/status', (route) => route.fulfill({ json: { status: 'confirmation_required', message: '请在 Steam 手机 App 中确认本次登录', accountName: 'test', steamId: null, updatedAt: new Date().toISOString() } }));
   await page.route('**/api/steam/auth/qr', (route) => route.fulfill({ json: { status: 'confirmation_required', qrCode: null, updatedAt: null } }));
@@ -65,7 +82,7 @@ test('search filters, page jumps and scroll position are preserved without anoth
   await page.locator('.filter-menu').filter({ hasText: '类型' }).locator('summary').click();
   for (const label of ['网页', '视频', '图片', '应用']) await page.getByLabel(label, { exact: true }).uncheck();
   await page.locator('.filter-menu').filter({ hasText: '内容分级' }).locator('summary').click();
-  for (const label of ['PG13', '成人']) await page.getByLabel(label, { exact: true }).uncheck();
+  await page.getByLabel('PG13', { exact: true }).uncheck();
   await page.getByLabel('排序方式', { exact: true }).selectOption('subscriptions');
   await expect.poll(() => requests.length).toBe(3);
   const params = new URL(requests[2]).searchParams;

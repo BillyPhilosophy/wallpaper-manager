@@ -1,4 +1,4 @@
-import { Worker } from 'bullmq';
+import { Queue, Worker } from 'bullmq';
 import IORedis from 'ioredis';
 import { parseWorkerEnv } from '@wallpaper-manager/config';
 import { prisma, recoverInterruptedJobs } from '@wallpaper-manager/database';
@@ -11,6 +11,9 @@ import { startAuthServer } from './auth-server';
 async function main() {
   const env = parseWorkerEnv(); await recoverInterruptedJobs(prisma); await refreshDownloadedClassifications(env.STEAM_ROOT);
   const connection = new IORedis(env.REDIS_URL, { maxRetriesPerRequest: null });
+  const downloadQueue = new Queue('wallpaper-downloads', { connection });
+  const queued = await prisma.downloadJob.findMany({ where: { status: 'queued' } });
+  for (const job of queued) await downloadQueue.add('download', { jobId: job.id, workshopId: job.workshopId }, { jobId: job.id, attempts: 1 });
   const network = new SteamNetworkController();
   const steamGuard = new SteamGuardClient(env.STEAMGUARD_BIN, env.STEAMGUARD_MAFILES_DIR, env.STEAMGUARD_CLI_PASSKEY_FILE, network);
   const steam = new DepotDownloaderClient(env.DEPOTDOWNLOADER_BIN, env.STEAM_CONFIG_DIR, env.DOWNLOAD_TIMEOUT_MS, steamGuard, network);
@@ -19,7 +22,7 @@ async function main() {
   const server = startAuthServer(steam, 9780, processor);
   const downloads = new Worker('wallpaper-downloads', (job) => processor.process(job as any), { connection, concurrency: env.DOWNLOAD_CONCURRENCY });
   const deletions = new Worker('wallpaper-deletions', (job) => deleteWallpaper(job.data, env.STEAM_ROOT, env.TRASH_DIR), { connection, concurrency: 1 });
-  const shutdown = async () => { await Promise.allSettled([downloads.close(), deletions.close()]); server.close(); await steam.close(); await connection.quit(); await prisma.$disconnect(); process.exit(0); };
+  const shutdown = async () => { await Promise.allSettled([downloads.close(), deletions.close(), downloadQueue.close()]); server.close(); await steam.close(); await connection.quit(); await prisma.$disconnect(); process.exit(0); };
   process.on('SIGTERM', () => void shutdown()); process.on('SIGINT', () => void shutdown());
   console.log('Wallpaper Manager worker ready');
 }

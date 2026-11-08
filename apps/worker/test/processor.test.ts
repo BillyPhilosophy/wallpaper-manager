@@ -51,4 +51,25 @@ describe('DepotDownloader processing', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it('adopts a fully published directory after a crash instead of downloading again', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'wallpaper-manager-processor-'));
+    const published = path.join(root, 'steam-data', 'steamapps', 'workshop', 'content', '431960', '123');
+    await mkdir(published, { recursive: true });
+    await writeFile(path.join(published, 'project.json'), JSON.stringify({ title: 'Recovered', type: 'scene', file: 'scene.pkg' }));
+    await writeFile(path.join(published, 'scene.pkg'), 'fixture');
+    const steam = { download: vi.fn() } as unknown as SteamClient;
+    const downloadJob = { updateMany: vi.fn().mockResolvedValue({ count: 1 }) };
+    const wallpaper = { update: vi.fn().mockResolvedValue({}), findUnique: vi.fn().mockResolvedValue({ downloadedAt: null }) };
+    const db = { downloadJob, wallpaper, $transaction: vi.fn((callback) => callback({ downloadJob, wallpaper })) };
+    const processor = new DownloadProcessor(steam, { exists: vi.fn().mockResolvedValue(0) } as any, path.join(root, 'staging'), path.join(root, 'steam-data'), db as any);
+    try {
+      await processor.process({ data: { jobId: crypto.randomUUID(), workshopId: '123' } } as any);
+      expect(steam.download).not.toHaveBeenCalled();
+      expect(downloadJob.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'succeeded' }) }));
+      expect(wallpaper.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'downloaded' }) }));
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });

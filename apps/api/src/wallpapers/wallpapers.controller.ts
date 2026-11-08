@@ -50,7 +50,7 @@ export class WallpapersController {
       return created;
     });
     if (!job) return { job: null, wallpaper: serializeWallpaper(await this.find(id)) };
-    if (job.status === 'queued') await this.infra.downloads.add('download', { jobId: job.id, workshopId: id }, { jobId: job.id, attempts: 1, removeOnComplete: 100, removeOnFail: 100 });
+    if (job.status === 'queued') await this.enqueueDownload(job);
     return { job: serializeJob(job) };
   }
   @Get('downloads')
@@ -67,11 +67,11 @@ export class WallpapersController {
   @Delete('downloads/:jobId')
   async removeJob(@Param('jobId') id: string) {
     safeJobId(id);
-    const result = await this.infra.db.downloadJob.deleteMany({ where: { id, status: 'failed' } });
+    const result = await this.infra.db.downloadJob.deleteMany({ where: { id, status: { in: ['failed', 'cancelled'] } } });
     if (result.count) return { deleted: result.count };
     const job = await this.infra.db.downloadJob.findUnique({ where: { id }, select: { id: true } });
     if (!job) throw new NotFoundException('任务不存在');
-    throw new ConflictException('仅失败任务可删除');
+    throw new ConflictException('仅失败或已取消任务可删除');
   }
   @Post('downloads/:jobId/cancel') @HttpCode(200)
   async cancel(@Param('jobId') id: string) {
@@ -87,10 +87,14 @@ export class WallpapersController {
   async retry(@Param('jobId') id: string) {
     safeJobId(id); const old = await this.infra.db.downloadJob.findUnique({ where: { id } }); if (!old) throw new NotFoundException('任务不存在');
     if (!['failed', 'cancelled'].includes(old.status)) throw new ConflictException('仅失败或已取消任务可重试');
-    const active = await this.infra.db.downloadJob.findFirst({ where: { workshopId: old.workshopId, status: { in: [...ACTIVE_DOWNLOAD_STATUSES] } } }); if (active) return { job: serializeJob(active) };
-    const job = await this.infra.db.downloadJob.create({ data: { id: randomUUID(), workshopId: old.workshopId, activeWorkshopId: old.workshopId, attempt: old.attempt + 1 } });
-    await this.infra.db.wallpaper.update({ where: { workshopId: old.workshopId }, data: { status: 'queued', lastErrorCode: null, lastErrorMessage: null } });
-    await this.infra.downloads.add('download', { jobId: job.id, workshopId: old.workshopId }, { jobId: job.id });
+    const job = await this.infra.db.$transaction(async (tx) => {
+      const active = await tx.downloadJob.findFirst({ where: { workshopId: old.workshopId, status: { in: [...ACTIVE_DOWNLOAD_STATUSES] } } });
+      if (active) return active;
+      const created = await tx.downloadJob.create({ data: { id: randomUUID(), workshopId: old.workshopId, activeWorkshopId: old.workshopId, attempt: old.attempt + 1 } });
+      await tx.wallpaper.update({ where: { workshopId: old.workshopId }, data: { status: 'queued', lastErrorCode: null, lastErrorMessage: null } });
+      return created;
+    });
+    if (job.status === 'queued') await this.enqueueDownload(job);
     return { job: serializeJob(job) };
   }
   @Delete('wallpapers/:workshopId')
@@ -131,6 +135,17 @@ export class WallpapersController {
     response.status(status).setHeader('Content-Length', end - start + 1);
     if (request.method === 'HEAD') { response.end(); return; }
     const stream = createReadStream(file, { start, end }); stream.on('error', () => response.destroy()); stream.pipe(response);
+  }
+  private async enqueueDownload(job: { id: string; workshopId: string }): Promise<void> {
+    try {
+      await this.infra.downloads.add('download', { jobId: job.id, workshopId: job.workshopId }, { jobId: job.id, attempts: 1, removeOnComplete: 100, removeOnFail: 100 });
+    } catch {
+      await this.infra.db.$transaction(async (tx) => {
+        const changed = await tx.downloadJob.updateMany({ where: { id: job.id, status: 'queued' }, data: { status: 'failed', activeWorkshopId: null, errorCode: 'QUEUE_UNAVAILABLE', errorMessage: '下载队列不可用，请稍后重试', finishedAt: new Date() } });
+        if (changed.count) await tx.wallpaper.updateMany({ where: { workshopId: job.workshopId, status: 'queued' }, data: { status: 'not_downloaded', lastErrorCode: 'QUEUE_UNAVAILABLE', lastErrorMessage: '下载队列不可用，请稍后重试' } });
+      });
+      throw new ServiceUnavailableException({ code: 'QUEUE_UNAVAILABLE', message: '下载队列不可用，请稍后重试' });
+    }
   }
   private async find(id: string) { assertWorkshopId(id); const item = await this.infra.db.wallpaper.findUnique({ where: { workshopId: id } }); if (!item) throw new NotFoundException('壁纸不存在'); return item; }
 }

@@ -16,7 +16,7 @@ describe('Steam subscription synchronization', () => {
     const controller = new WorkshopController({ db } as any);
     expect((await controller.syncSubscriptions()).status).toBe('running');
     await vi.waitFor(() => expect(controller.syncStatus().status).toBe('succeeded'));
-    expect(db.wallpaper.upsert).toHaveBeenCalledWith(expect.objectContaining({ where: { workshopId: '123' }, create: expect.objectContaining({ type: 'image', contentRating: 'pg13', subscribed: true }) }));
+    expect(db.wallpaper.upsert).toHaveBeenCalledWith(expect.objectContaining({ where: { workshopId: '123' }, update: expect.objectContaining({ type: 'image', contentRating: 'pg13', subscribed: true }), create: expect.objectContaining({ type: 'image', contentRating: 'pg13', subscribed: true }) }));
     expect(controller.syncStatus().total).toBe(1);
   });
 

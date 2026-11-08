@@ -26,10 +26,12 @@ async function cached<T>(key: string, load: () => Promise<T>): Promise<T> {
   const hit = cache.get(key); if (hit && hit.expires > Date.now()) return hit.value as T;
   const value = await load(); cache.set(key, { value, expires: Date.now() + 60_000 }); if (cache.size > 200) cache.delete(cache.keys().next().value!); return value;
 }
-async function steamFetch(network: SteamNetworkController | undefined, url: string, init: RequestInit = {}): Promise<any> {
-  while (recentRequests.length && recentRequests[0] <= Date.now() - 1000) recentRequests.shift();
-  if (recentRequests.length >= 4) throw new HttpException({ code: 'STEAM_RATE_LIMITED', message: '搜索请求过于频繁' }, 429);
-  recentRequests.push(Date.now());
+async function steamFetch(network: SteamNetworkController | undefined, url: string, init: RequestInit = {}, kind: 'user' | 'sync' = 'user'): Promise<any> {
+  if (kind === 'user') {
+    while (recentRequests.length && recentRequests[0] <= Date.now() - 1000) recentRequests.shift();
+    if (recentRequests.length >= 4) throw new HttpException({ code: 'STEAM_RATE_LIMITED', message: '搜索请求过于频繁' }, 429);
+    recentRequests.push(Date.now());
+  }
   let response: Response;
   try { response = network ? await network.fetchSteam(url, { ...init, headers: { 'User-Agent': 'WallpaperManager/1.0', ...init.headers } }) : await fetch(url, { ...init, signal: AbortSignal.timeout(15000), headers: { 'User-Agent': 'WallpaperManager/1.0', ...init.headers } }); }
   catch { console.warn('[steam-api] network request failed or timed out'); throw new ServiceUnavailableException({ code: 'STEAM_API_UNAVAILABLE', message: '无法连接 Steam 官方接口' }); }
@@ -87,7 +89,12 @@ export class WorkshopController {
     if (requestedSteamId && requestedSteamId !== auth?.steamId) await this.infra.db.steamAuthState.upsert({ where: { id: 1 }, update: { steamId: requestedSteamId }, create: { id: 1, steamId: requestedSteamId } });
     subscriptionSync = { status: 'running', total: 0, synced: 0, message: null, updatedAt: new Date().toISOString() };
     console.log('[subscriptions] sync started');
-    void this.performSubscriptionSync(key, steamId).catch(() => { console.error('[subscriptions] sync failed'); subscriptionSync = { ...subscriptionSync, status: 'failed', message: 'Steam 订阅同步失败，请稍后重试', updatedAt: new Date().toISOString() }; });
+    void this.performSubscriptionSync(key, steamId).catch((error) => {
+      const code = subscriptionErrorCode(error);
+      const messages: Record<string, string> = { STEAM_RATE_LIMITED: 'Steam 请求限流，请稍后重试', STEAM_API_UNAVAILABLE: '无法连接 Steam 订阅接口，请稍后重试', INTERNAL_ERROR: 'Steam 订阅同步失败，请稍后重试' };
+      console.error(`[subscriptions] sync failed code=${code}`);
+      subscriptionSync = { ...subscriptionSync, status: 'failed', message: messages[code], updatedAt: new Date().toISOString() };
+    });
     return subscriptionSync;
   }
   private async performSubscriptionSync(key: string, steamId: string) {
@@ -96,7 +103,7 @@ export class WorkshopController {
     do {
       if (page > 1) await new Promise((resolve) => setTimeout(resolve, 300));
       const params = new URLSearchParams({ key, steamid: steamId, appid: '431960', type: 'mysubscriptions', page: String(page), numperpage: '100', ids_only: 'true' });
-      const body = await steamFetch(this.infra.steamNetwork, `https://api.steampowered.com/IPublishedFileService/GetUserFiles/v1/?${params}`);
+      const body = await steamFetch(this.infra.steamNetwork, `https://api.steampowered.com/IPublishedFileService/GetUserFiles/v1/?${params}`, {}, 'sync');
       const details = body.response?.publishedfiledetails || [];
       count = details.length;
       ids.push(...details.map((entry: any) => String(entry.publishedfileid || entry)));
@@ -110,12 +117,12 @@ export class WorkshopController {
       const batch = ids.slice(offset, offset + 100);
       const params = new URLSearchParams({ itemcount: String(batch.length) });
       batch.forEach((id, index) => params.set(`publishedfileids[${index}]`, id));
-      const detailsBody = await steamFetch(this.infra.steamNetwork, 'https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: params });
+      const detailsBody = await steamFetch(this.infra.steamNetwork, 'https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: params }, 'sync');
       const details = detailsBody.response?.publishedfiledetails || [];
       for (const detail of details) {
         if (!detail.publishedfileid) continue;
         const result = item(detail);
-        await this.infra.db.wallpaper.upsert({ where: { workshopId: result.workshopId }, update: { title: result.title, description: result.description, subscribed: true, officialPreviewUrl: result.officialPreviewUrl, metadataJson: JSON.stringify(result.metadataJson) }, create: { workshopId: result.workshopId, title: result.title, description: result.description, type: result.type, contentRating: result.contentRating, subscribed: true, officialPreviewUrl: result.officialPreviewUrl, metadataJson: JSON.stringify(result.metadataJson) } });
+        await this.infra.db.wallpaper.upsert({ where: { workshopId: result.workshopId }, update: { title: result.title, description: result.description, type: result.type, contentRating: result.contentRating, subscribed: true, officialPreviewUrl: result.officialPreviewUrl, metadataJson: JSON.stringify(result.metadataJson) }, create: { workshopId: result.workshopId, title: result.title, description: result.description, type: result.type, contentRating: result.contentRating, subscribed: true, officialPreviewUrl: result.officialPreviewUrl, metadataJson: JSON.stringify(result.metadataJson) } });
       }
       subscriptionSync = { ...subscriptionSync, synced: Math.min(offset + batch.length, ids.length), updatedAt: new Date().toISOString() };
     }
@@ -123,4 +130,10 @@ export class WorkshopController {
     subscriptionSync = { ...subscriptionSync, status: 'succeeded', message: null, updatedAt: new Date().toISOString() };
     console.log(`[subscriptions] sync succeeded total=${ids.length}`);
   }
+}
+
+function subscriptionErrorCode(error: unknown): string {
+  const response = error instanceof HttpException ? error.getResponse() : null;
+  const code = response && typeof response === 'object' && 'code' in response ? String(response.code) : 'INTERNAL_ERROR';
+  return ['STEAM_RATE_LIMITED', 'STEAM_API_UNAVAILABLE'].includes(code) ? code : 'INTERNAL_ERROR';
 }

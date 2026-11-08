@@ -6,7 +6,9 @@ import { useRemote } from '../hooks';
 const active = ['queued', 'downloading', 'verifying', 'publishing'];
 
 export function DownloadsPage() {
-  const { data, reload } = useRemote<Page<DownloadJob>>(() => api('/downloads?page=1&pageSize=50'), [], 2500);
+  const [page, setPage] = useState(1);
+  const [pageInput, setPageInput] = useState('1');
+  const { data, error, reload } = useRemote<Page<DownloadJob>>(() => api(`/downloads?page=${page}&pageSize=20`), [page], 2500);
   const [busy, setBusy] = useState('');
   const [message, setMessage] = useState('');
   const perform = async (key: string, task: () => Promise<unknown>) => {
@@ -20,10 +22,15 @@ export function DownloadsPage() {
   const clearFailed = () => {
     if (confirm('确定删除所有失败的下载记录？此操作不会删除已下载壁纸。')) void perform('clear-failed', () => api('/downloads/failed', { method: 'DELETE' }));
   };
-  const hasFailed = data?.items.some((job) => job.status === 'failed') || false;
+  const maxPage = Math.max(1, Math.ceil((data?.total || 0) / 20));
+  const goToPage = (next: number) => {
+    if (!Number.isSafeInteger(next) || next < 1 || next > maxPage) return;
+    window.scrollTo(0, 0); setPage(next); setPageInput(String(next));
+  };
   return <section>
-    <div className="page-heading"><div><p className="eyebrow">TRANSFER ACTIVITY</p><h1>下载中心</h1><p>显示上游返回的真实字节进度、占比和平均速率。</p></div><button className="danger" disabled={!hasFailed || busy === 'clear-failed'} onClick={clearFailed}>清空失败记录</button></div>
+    <div className="page-heading"><div><p className="eyebrow">TRANSFER ACTIVITY</p><h1>下载中心</h1><p>显示上游返回的真实字节进度、占比和平均速率。</p></div><button className="danger" disabled={!data || busy === 'clear-failed'} onClick={clearFailed}>清空失败记录</button></div>
     {message && <p className="error-text" role="alert">{message}</p>}
+    {error && <div className="error-state">{error}<button className="text-button" onClick={reload}>重试</button></div>}
     <div className="job-list">{data?.items.map((job) => <article className="job" key={job.id}>
       <div><Link to={`/wallpaper/${job.workshopId}`}>工坊 {job.workshopId}</Link><small>{job.id} · 第 {job.attempt} 次尝试</small></div>
       <span className={`status ${job.status}`}>{statusLabel[job.status]}</span>
@@ -35,9 +42,10 @@ export function DownloadsPage() {
           {Number(job.progress.totalBytes) > 0 && <small>{formatBytes(job.progress.downloadedBytes)} / {formatBytes(job.progress.totalBytes)}</small>}
         </div>}
       </div>
-      <div className="job-actions">{active.includes(job.status) && <button className="secondary" disabled={busy === job.id} onClick={() => void action(job, 'cancel')}>取消</button>}{['failed', 'cancelled'].includes(job.status) && <button className="secondary" disabled={busy === job.id} onClick={() => void action(job, 'retry')}>重试</button>}{job.status === 'failed' && <button className="danger" disabled={busy === job.id} onClick={() => void remove(job)}>删除记录</button>}</div>
+      <div className="job-actions">{active.includes(job.status) && <button className="secondary" disabled={busy === job.id} onClick={() => void action(job, 'cancel')}>取消</button>}{['failed', 'cancelled'].includes(job.status) && <button className="secondary" disabled={busy === job.id} onClick={() => void action(job, 'retry')}>重试</button>}{['failed', 'cancelled'].includes(job.status) && <button className="danger" disabled={busy === job.id} onClick={() => void remove(job)}>删除记录</button>}</div>
     </article>)}</div>
-    {data && !data.items.length && <div className="empty-state">暂无下载任务。去工坊搜索一张喜欢的壁纸吧。</div>}
+    {!error && data && !data.items.length && <div className="empty-state">暂无下载任务。去工坊搜索一张喜欢的壁纸吧。</div>}
+    <div className="pagination"><button className="secondary" disabled={!data || page <= 1} onClick={() => goToPage(page - 1)}>上一页</button><form className="page-jump" onSubmit={(event) => { event.preventDefault(); goToPage(Number(pageInput)); }}><input aria-label="页码" type="number" min="1" max={maxPage} value={pageInput} onChange={(event) => setPageInput(event.target.value)}/><button className="secondary" disabled={!data}>跳转</button></form><span>共 {maxPage} 页 · {data?.total || 0} 项</span><button className="secondary" disabled={!data || page >= maxPage} onClick={() => goToPage(page + 1)}>下一页</button></div>
   </section>;
 }
 

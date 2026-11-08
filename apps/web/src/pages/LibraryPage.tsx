@@ -14,7 +14,7 @@ export function LibraryPage() {
   const [page, setPage] = useState(librarySession.page);
   const [pageInput, setPageInput] = useState(String(page));
   const [pageError, setPageError] = useState('');
-  const { data, loading, reload } = useRemote<Page<Wallpaper>>(() => {
+  const { data, error, loading, reload } = useRemote<Page<Wallpaper>>(() => {
     if (!types.length || !ratings.length) return Promise.resolve({ items: [], page, pageSize: 24, total: 0 });
     const params = new URLSearchParams({ q, status, page: String(page), pageSize: '24' });
     if (types.length < typeOptions.length) params.set('type', types.join(','));
@@ -40,9 +40,10 @@ export function LibraryPage() {
   return <section aria-busy={loading}>
     <div className="page-heading"><div><p className="eyebrow">YOUR COLLECTION</p><h1>我的壁纸</h1><p>管理已与 DSH 共享的本地原始工坊文件。</p></div></div>
     <div className="filters"><input placeholder="筛选标题或 ID" aria-label="筛选标题或 ID" value={q} onChange={(event) => changeQ(event.target.value)}/><MultiSelectFilter label="类型" options={typeOptions} selected={types} onChange={changeTypes}/><MultiSelectFilter label="内容分级" options={ratingOptions} selected={ratings} onChange={changeRatings}/><select aria-label="下载状态" value={status} onChange={(event) => changeStatus(event.target.value)}><option value="">全部状态</option>{Object.entries(statusLabel).slice(0, 7).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></div>
+    {error && <div className="error-state">{error}<button className="text-button" onClick={reload}>重试</button></div>}
     {loading && data && <div className="inline-loading" role="status">正在更新壁纸库…</div>}
     {loading && !data ? <div className="loading" role="status">正在读取壁纸库…</div> : <div className={`wallpaper-grid${loading ? ' is-loading' : ''}`}>{data?.items.map((wallpaper) => <WallpaperCard key={wallpaper.workshopId} item={{ ...wallpaper, metadataJson: wallpaper.metadataJson as Record<string, unknown>, localStatus: wallpaper.status, previewContentType: null }} action={wallpaper.status === 'downloaded' ? <button className="danger" onClick={() => void remove(wallpaper.workshopId)}>删除</button> : null}/>)}</div>}
-    {!loading && data && !data.items.length ? <div className="empty-state">还没有匹配的壁纸。</div> : null}
+    {!loading && !error && data && !data.items.length ? <div className="empty-state">还没有匹配的壁纸。</div> : null}
     <div className="pagination">
       <button className="secondary" disabled={loading || !data || page <= 1} onClick={() => goToPage(page - 1)}>上一页</button>
       <form className="page-jump" onSubmit={(event) => { event.preventDefault(); goToPage(Number(pageInput)); }}><input aria-label="页码" type="number" min="1" max={maxPage} step="1" value={pageInput} disabled={loading || !data} onChange={(event) => { setPageInput(event.target.value); setPageError(''); }}/><button className="secondary" disabled={loading || !data}>跳转</button></form>

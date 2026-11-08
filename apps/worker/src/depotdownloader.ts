@@ -87,11 +87,14 @@ export class DepotDownloaderClient implements SteamClient {
     void this.monitorQrLogin(run, probeDir);
   }
 
-  async login(username: string, password: string, steamId?: string): Promise<void> {
+  login(username: string, password: string, steamId?: string): Promise<void> {
     if (!/^[^\s]{1,64}$/.test(username) || !password) throw new Error('INVALID_LOGIN');
     if (steamId && !/^7656119\d{10}$/.test(steamId)) throw new Error('INVALID_STEAM_ID');
     if (this.active || this.starting) throw new Error('STEAM_BUSY');
+    return this.performLogin(username, password, steamId);
+  }
 
+  private async performLogin(username: string, password: string, steamId?: string): Promise<void> {
     this.starting = true;
     const probeDir = path.join(this.configDir, 'auth-probe');
     let run: ActiveProcess | null = null;

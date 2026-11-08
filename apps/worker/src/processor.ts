@@ -18,10 +18,27 @@ export class DownloadProcessor {
     if (changed.count) await this.db.wallpaper.updateMany({ where: { workshopId, status: { in: from } }, data: { status: to as any } });
     if (!changed.count && await this.cancelled(id)) throw new Error('CANCELLED');
   }
+  private async recoverPublished(jobId: string, workshopId: string): Promise<boolean> {
+    const target = wallpaperDirectory(this.steamRoot, workshopId);
+    const info = await inspectWallpaper(target).catch(() => null);
+    if (!info || info.type === 'application' || info.type === 'unknown') return false;
+    const size = await directorySize(target);
+    if (!size) return false;
+    return this.completePublished(jobId, workshopId, info, size);
+  }
+  private async completePublished(jobId: string, workshopId: string, info: Awaited<ReturnType<typeof inspectWallpaper>>, size: bigint, expectedStatus?: string): Promise<boolean> {
+    return this.db.$transaction(async (tx) => {
+      const where = expectedStatus ? { id: jobId, status: expectedStatus } : { id: jobId, status: { notIn: ['succeeded', 'cancelled'] } };
+      const result = await tx.downloadJob.updateMany({ where, data: { status: 'succeeded', activeWorkshopId: null, finishedAt: new Date(), errorCode: null, errorMessage: null } });
+      if (result.count) await tx.wallpaper.update({ where: { workshopId }, data: { title: typeof info.project.title === 'string' ? info.project.title : undefined, type: info.type, contentRating: info.contentRating, metadataJson: JSON.stringify({ ...info.project, __entry: info.entry }), localRelativePath: workshopId, status: 'downloaded', fileSizeBytes: size, downloadedAt: (await tx.wallpaper.findUnique({ where: { workshopId } }))?.downloadedAt || new Date(), lastErrorCode: null, lastErrorMessage: null } });
+      return Boolean(result.count);
+    });
+  }
   async process(job: Job<DownloadPayload>): Promise<void> {
     const { jobId, workshopId } = job.data; const staging = path.join(this.stagingDir, jobId);
     try {
       if (await this.cancelled(jobId)) throw new Error('CANCELLED');
+      if (await this.recoverPublished(jobId, workshopId)) return;
       await this.stage(jobId, workshopId, ['queued'], 'downloading');
       await fs.mkdir(staging, { recursive: true, mode: 0o755 });
       const source = stagingWorkshopDirectory(this.stagingDir, jobId, workshopId);
@@ -32,11 +49,7 @@ export class DownloadProcessor {
       const size = await directorySize(source); if (!size) throw new Error('RESOURCE_MISSING');
       await this.stage(jobId, workshopId, ['verifying'], 'publishing');
       const destination = await publishDirectory(source, this.steamRoot, workshopId);
-      const changed = await this.db.$transaction(async (tx) => {
-        const result = await tx.downloadJob.updateMany({ where: { id: jobId, status: 'publishing' }, data: { status: 'succeeded', activeWorkshopId: null, finishedAt: new Date(), errorCode: null, errorMessage: null } });
-        if (result.count) await tx.wallpaper.update({ where: { workshopId }, data: { title: typeof info.project.title === 'string' ? info.project.title : undefined, type: info.type, contentRating: info.contentRating, metadataJson: JSON.stringify({ ...info.project, __entry: info.entry }), localRelativePath: workshopId, status: 'downloaded', fileSizeBytes: size, downloadedAt: (await tx.wallpaper.findUnique({ where: { workshopId } }))?.downloadedAt || new Date(), lastErrorCode: null, lastErrorMessage: null } });
-        return result.count;
-      });
+      const changed = await this.completePublished(jobId, workshopId, info, size, 'publishing');
       if (!changed) { const trash = path.join(this.stagingDir, '..', 'trash'); await moveToTrash(this.steamRoot, trash, workshopId).then((target) => fs.rm(target, { recursive: true, force: true })); throw new Error('CANCELLED'); }
       await fs.rm(staging, { recursive: true, force: true });
       this.progress.delete(jobId);

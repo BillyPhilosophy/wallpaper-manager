@@ -80,7 +80,7 @@ describe('DepotDownloader authentication', () => {
     const steam = new DepotDownloaderClient('depotdownloader', path.join(root, 'config'), 1000, guard);
     try {
       const first = steam.login('test', 'secret');
-      await expect(steam.login('test', 'secret')).rejects.toThrow('STEAM_BUSY');
+      expect(() => steam.login('test', 'secret')).toThrow('STEAM_BUSY');
       release();
       await first;
       expect(spawn).toHaveBeenCalledTimes(1);

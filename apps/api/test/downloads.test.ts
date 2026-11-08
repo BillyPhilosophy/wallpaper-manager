@@ -19,13 +19,13 @@ describe('download progress API', () => {
     const downloadJob = { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) };
     const result = await new WallpapersController({ db: { downloadJob } } as any).removeJob(job.id);
     expect(result).toEqual({ deleted: 1 });
-    expect(downloadJob.deleteMany).toHaveBeenCalledWith({ where: { id: job.id, status: 'failed' } });
+    expect(downloadJob.deleteMany).toHaveBeenCalledWith({ where: { id: job.id, status: { in: ['failed', 'cancelled'] } } });
   });
 
   it('rejects deleting an active or retried job', async () => {
     const downloadJob = { deleteMany: vi.fn().mockResolvedValue({ count: 0 }), findUnique: vi.fn().mockResolvedValue(job) };
     await expect(new WallpapersController({ db: { downloadJob } } as any).removeJob(job.id)).rejects.toMatchObject({ status: 409 });
-    expect(downloadJob.deleteMany).toHaveBeenCalledWith({ where: { id: job.id, status: 'failed' } });
+    expect(downloadJob.deleteMany).toHaveBeenCalledWith({ where: { id: job.id, status: { in: ['failed', 'cancelled'] } } });
   });
 
   it('clears only failed job history', async () => {
@@ -33,5 +33,16 @@ describe('download progress API', () => {
     const result = await new WallpapersController({ db: { downloadJob } } as any).clearFailedJobs();
     expect(result).toEqual({ deleted: 3 });
     expect(downloadJob.deleteMany).toHaveBeenCalledWith({ where: { status: 'failed' } });
+  });
+
+  it('marks a database job as failed when Redis enqueueing fails', async () => {
+    const created = { ...job, status: 'queued' };
+    const downloadJob = { findFirst: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue(created), updateMany: vi.fn().mockResolvedValue({ count: 1 }) };
+    const wallpaper = { upsert: vi.fn().mockResolvedValue({ status: 'not_downloaded' }), update: vi.fn().mockResolvedValue({}), updateMany: vi.fn().mockResolvedValue({ count: 1 }) };
+    const db = { $transaction: vi.fn((callback) => callback({ downloadJob, wallpaper })) };
+    const downloads = { count: vi.fn().mockResolvedValue(0), add: vi.fn().mockRejectedValue(new Error('offline')) };
+    const controller = new WallpapersController({ db, downloads } as any);
+    await expect(controller.download('123')).rejects.toMatchObject({ response: { code: 'QUEUE_UNAVAILABLE' } });
+    expect(downloadJob.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: created.id, status: 'queued' }, data: expect.objectContaining({ status: 'failed', errorCode: 'QUEUE_UNAVAILABLE' }) }));
   });
 });

@@ -10,3 +10,5 @@
 .inline-loading{margin:-14px 0 18px;color:var(--muted);font-size:12px}.wallpaper-grid.is-loading{opacity:.55;pointer-events:none}.page-jump{display:flex;align-items:center;gap:8px}.page-jump input{width:76px;padding:8px 10px;text-align:center}.page-jump button{padding:8px 12px}.page-error{text-align:center;color:#ff9c9c;font-size:12px;margin:-20px 0 25px}@media(max-width:600px){.pagination{flex-wrap:wrap;gap:12px}.page-jump{order:3;flex-basis:100%;justify-content:center}.page-error{margin-top:-10px}}
 
 .subscription-controls{margin-bottom:24px}.subscription-controls label{display:grid;gap:8px;color:var(--muted);font-size:12px}@media(max-width:900px){.sidebar nav a[href="/subscriptions"]:before{content:'↻'}}
+
+.live-preview-frame{display:block;border:0;padding:0}.filter-notice{color:var(--muted);font-size:12px;margin:-16px 0 22px}.content-filter-toggle{display:flex!important;grid-template-columns:none;align-items:flex-start;gap:10px!important;color:var(--muted);font-size:13px}.content-filter-toggle input{width:auto;margin-top:2px}

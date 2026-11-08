@@ -1,13 +1,18 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, waitFor } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
+import { fireEvent, render } from '@testing-library/react';
 import type { PreviewDescriptor } from '@wallpaper-manager/contracts';
 import { LivePreview } from '../src/features/live-preview/LivePreview';
-const release = vi.fn(); const destroy = vi.fn(); const unmount = vi.fn(async () => { release(); destroy(); });
-vi.mock('../src/features/live-preview/adapter', () => ({ WebWallGlAdapter: class { mount = vi.fn(async () => undefined); unmount = unmount; pause = vi.fn(); resume = vi.fn(); } }));
 const descriptor: PreviewDescriptor = { workshopId: '1', mode: 'webwallgl', type: 'scene', entry: 'scene.pkg', resourceBaseUrl: '/api/wallpapers/1/resources', fallbackPreviewUrl: null, degraded: false, message: null };
 describe('LivePreview', () => {
-  it('releases engine on unmount', async () => { const view = render(<LivePreview descriptor={descriptor}/>); await waitFor(() => expect(view.getByLabelText('WebWallGL 实时预览')).toBeTruthy()); view.unmount(); await waitFor(() => expect(unmount).toHaveBeenCalled()); expect(release).toHaveBeenCalled(); expect(destroy).toHaveBeenCalled(); });
+  it('isolates engine scripts in an opaque-origin sandboxed iframe', () => {
+    const view = render(<LivePreview descriptor={descriptor}/>);
+    const frame = view.getByLabelText('WebWallGL 实时预览') as HTMLIFrameElement;
+    expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
+    expect(frame.getAttribute('src')).toBe('/preview.html');
+    fireEvent.load(frame);
+    view.unmount();
+  });
 
   it('plays local video without mounting WebWallGL and falls back only on playback failure', () => {
     const video: PreviewDescriptor = { ...descriptor, mode: 'local-video', type: 'video', entry: 'nested/video file.mp4', fallbackPreviewUrl: 'https://example.test/official.mp4' };

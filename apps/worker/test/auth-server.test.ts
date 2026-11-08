@@ -34,4 +34,22 @@ describe('worker authentication server', () => {
       warn.mockRestore();
     }
   });
+
+  it('rejects a busy login before returning 202', async () => {
+    const steam = { status: 'authenticated', login: vi.fn(() => { throw new Error('STEAM_BUSY'); }) } as unknown as SteamClient;
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const server = startAuthServer(steam, 0);
+    try {
+      await new Promise<void>((resolve) => { if (server.listening) resolve(); else server.once('listening', resolve); });
+      const port = (server.address() as AddressInfo).port;
+      const response = await fetch(`http://127.0.0.1:${port}/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'test', password: 'secret' }) });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ code: 'STEAM_BUSY' });
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      log.mockRestore(); warn.mockRestore();
+    }
+  });
 });
