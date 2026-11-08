@@ -78,18 +78,22 @@ export function sanitizeWorkerError(error: unknown): { code: string; message: st
   if (known[code]) return { code, message: known[code] };
   return sanitizeError(error);
 }
-export async function deleteWallpaper(data: { deleteJobId: string; workshopId: string }, steamRoot: string, trashDir: string): Promise<void> {
+export async function deleteWallpaper(data: { deleteJobId: string; workshopId: string }, steamRoot: string, trashDir: string, db: PrismaClient = prisma): Promise<void> {
   const { deleteJobId, workshopId } = data;
+  const source = wallpaperDirectory(steamRoot, workshopId);
+  const trashed = path.join(trashDir, deleteJobId, workshopId);
   try {
-    const target = await moveToTrash(steamRoot, trashDir, workshopId, deleteJobId);
-    await prisma.wallpaper.updateMany({ where: { workshopId, status: 'deleting' }, data: { status: 'not_downloaded', localRelativePath: null, fileSizeBytes: null, downloadedAt: null } });
-    await fs.rm(target, { recursive: true, force: true });
-  } catch (error) {
-    const trashed = path.join(trashDir, deleteJobId, workshopId);
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT' && await exists(trashed)) {
-      await prisma.wallpaper.updateMany({ where: { workshopId, status: 'deleting' }, data: { status: 'not_downloaded', localRelativePath: null, fileSizeBytes: null, downloadedAt: null } }); await fs.rm(trashed, { recursive: true, force: true }); return;
+    let target = trashed;
+    if (await exists(source)) target = await moveToTrash(steamRoot, trashDir, workshopId, deleteJobId);
+    else if (!await exists(trashed)) {
+      await db.wallpaper.deleteMany({ where: { workshopId } });
+      return;
     }
-    await prisma.wallpaper.updateMany({ where: { workshopId, status: 'deleting' }, data: { status: await exists(wallpaperDirectory(steamRoot, workshopId)) ? 'downloaded' : 'not_downloaded' } }); throw error;
+    await db.wallpaper.deleteMany({ where: { workshopId, status: 'deleting' } });
+    await fs.rm(target, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  } catch (error) {
+    if (await exists(source)) await db.wallpaper.updateMany({ where: { workshopId, status: 'deleting' }, data: { status: 'downloaded' } });
+    throw error;
   }
 }
 async function exists(value: string) { try { await fs.lstat(value); return true; } catch { return false; } }

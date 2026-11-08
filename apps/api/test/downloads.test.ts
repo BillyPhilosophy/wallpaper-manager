@@ -16,16 +16,16 @@ describe('download progress API', () => {
   });
 
   it('deletes one failed job without touching wallpaper files or active jobs', async () => {
-    const downloadJob = { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) };
+    const downloadJob = { deleteMany: vi.fn().mockResolvedValue({ count: 1 }), findUnique: vi.fn().mockResolvedValue({ ...job, status: 'failed' }) };
     const result = await new WallpapersController({ db: { downloadJob } } as any).removeJob(job.id);
     expect(result).toEqual({ deleted: 1 });
-    expect(downloadJob.deleteMany).toHaveBeenCalledWith({ where: { id: job.id, status: { in: ['failed', 'cancelled'] } } });
+    expect(downloadJob.deleteMany).toHaveBeenCalledWith({ where: { id: job.id, status: { in: ['failed', 'cancelled', 'succeeded'] } } });
   });
 
   it('rejects deleting an active or retried job', async () => {
     const downloadJob = { deleteMany: vi.fn().mockResolvedValue({ count: 0 }), findUnique: vi.fn().mockResolvedValue(job) };
     await expect(new WallpapersController({ db: { downloadJob } } as any).removeJob(job.id)).rejects.toMatchObject({ status: 409 });
-    expect(downloadJob.deleteMany).toHaveBeenCalledWith({ where: { id: job.id, status: { in: ['failed', 'cancelled'] } } });
+    expect(downloadJob.deleteMany).not.toHaveBeenCalled();
   });
 
   it('clears only failed job history', async () => {
@@ -44,5 +44,16 @@ describe('download progress API', () => {
     const controller = new WallpapersController({ db, downloads } as any);
     await expect(controller.download('123')).rejects.toMatchObject({ response: { code: 'QUEUE_UNAVAILABLE' } });
     expect(downloadJob.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: created.id, status: 'queued' }, data: expect.objectContaining({ status: 'failed', errorCode: 'QUEUE_UNAVAILABLE' }) }));
+  });
+
+  it('queues source deletion for a completed record when explicitly requested', async () => {
+    const completed = { ...job, status: 'succeeded' };
+    const downloadJob = { findUnique: vi.fn().mockResolvedValue(completed), findFirst: vi.fn().mockResolvedValue(null) };
+    const wallpaper = { findUnique: vi.fn().mockResolvedValue({ status: 'downloaded' }), updateMany: vi.fn().mockResolvedValue({ count: 1 }) };
+    const deletions = { add: vi.fn().mockResolvedValue({}) };
+    const result = await new WallpapersController({ db: { downloadJob, wallpaper }, deletions } as any).removeJob(completed.id, 'true');
+    expect(result.deleteJobId).toBeTruthy();
+    expect(wallpaper.updateMany).toHaveBeenCalledWith({ where: { workshopId: '123', status: 'downloaded' }, data: { status: 'deleting' } });
+    expect(deletions.add).toHaveBeenCalledWith('delete', expect.objectContaining({ workshopId: '123' }), expect.any(Object));
   });
 });

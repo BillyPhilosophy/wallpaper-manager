@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Controller, Delete, Get, Header, HttpCode, NotFoundException, Param, Post, Query, Req, Res, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, Body, ConflictException, Controller, Delete, Get, Header, HttpCode, NotFoundException, Param, Post, Query, Req, Res, ServiceUnavailableException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { createReadStream, promises as fs } from 'node:fs';
 import path from 'node:path';
@@ -60,18 +60,55 @@ export class WallpapersController {
     const progress = items.some((item) => ACTIVE_DOWNLOAD_STATUSES.includes(item.status as any)) ? await workerDownloadProgress() : new Map<string, DownloadProgress>();
     return { items: items.map((job) => ({ ...serializeJob(job), ...(progress.has(job.id) ? { progress: progress.get(job.id) } : {}) })), page, pageSize, total };
   }
+  @Get('downloads/deletion-preview')
+  async deletionPreview(@Query('jobId') jobId?: string) {
+    let ids: string[];
+    if (jobId) {
+      safeJobId(jobId);
+      const job = await this.infra.db.downloadJob.findUnique({ where: { id: jobId } });
+      if (!job) throw new NotFoundException('任务不存在');
+      ids = [job.workshopId];
+    } else {
+      const jobs = await this.infra.db.downloadJob.findMany({ where: { status: 'succeeded' }, select: { workshopId: true } });
+      ids = [...new Set(jobs.map((job: { workshopId: string }) => job.workshopId))];
+    }
+    const items = ids.length ? await this.infra.db.wallpaper.findMany({ where: { workshopId: { in: ids }, status: 'downloaded' }, select: { workshopId: true, title: true, officialPreviewUrl: true } }) : [];
+    return { items };
+  }
   @Get('downloads/:jobId')
   async job(@Param('jobId') id: string) { safeJobId(id); const job = await this.infra.db.downloadJob.findUnique({ where: { id } }); if (!job) throw new NotFoundException('任务不存在'); return serializeJob(job); }
   @Delete('downloads/failed')
   async clearFailedJobs() { const result = await this.infra.db.downloadJob.deleteMany({ where: { status: 'failed' } }); return { deleted: result.count }; }
+  @Post('downloads/clear-completed')
+  async clearCompleted(@Body() body?: { deleteSource?: unknown }) {
+    if (body?.deleteSource !== true) { const result = await this.infra.db.downloadJob.deleteMany({ where: { status: 'succeeded' } }); return { deleted: result.count, queued: 0, failed: 0 }; }
+    const jobs = await this.infra.db.downloadJob.findMany({ where: { status: 'succeeded' }, select: { workshopId: true } });
+    const ids = [...new Set(jobs.map((job: { workshopId: string }) => job.workshopId))];
+    const wallpapers = ids.length ? await this.infra.db.wallpaper.findMany({ where: { workshopId: { in: ids }, status: 'downloaded' }, select: { workshopId: true } }) : [];
+    const sourceIds = wallpapers.map((wallpaper: { workshopId: string }) => wallpaper.workshopId);
+    const removed = await this.infra.db.downloadJob.deleteMany({ where: { status: 'succeeded', workshopId: { notIn: sourceIds } } });
+    const failed: string[] = [];
+    for (const workshopId of sourceIds) {
+      try { await this.queueSourceDeletion(workshopId); } catch { failed.push(workshopId); }
+    }
+    return { deleted: removed.count, queued: sourceIds.length - failed.length, failed: failed.length };
+  }
   @Delete('downloads/:jobId')
-  async removeJob(@Param('jobId') id: string) {
+  async removeJob(@Param('jobId') id: string, @Query('deleteSource') deleteSource = '') {
     safeJobId(id);
-    const result = await this.infra.db.downloadJob.deleteMany({ where: { id, status: { in: ['failed', 'cancelled'] } } });
-    if (result.count) return { deleted: result.count };
-    const job = await this.infra.db.downloadJob.findUnique({ where: { id }, select: { id: true } });
+    if (deleteSource && deleteSource !== 'true') throw new BadRequestException('无效删除选项');
+    const job = await this.infra.db.downloadJob.findUnique({ where: { id } });
     if (!job) throw new NotFoundException('任务不存在');
-    throw new ConflictException('仅失败或已取消任务可删除');
+    if (!['failed', 'cancelled', 'succeeded'].includes(job.status)) throw new ConflictException('仅已结束任务可删除');
+    if (deleteSource === 'true') {
+      const wallpaper = await this.infra.db.wallpaper.findUnique({ where: { workshopId: job.workshopId } });
+      if (wallpaper?.status === 'downloaded') {
+        const deleteJobId = await this.queueSourceDeletion(job.workshopId);
+        return { deleted: 0, deleteJobId };
+      }
+    }
+    const result = await this.infra.db.downloadJob.deleteMany({ where: { id, status: { in: ['failed', 'cancelled', 'succeeded'] } } });
+    return { deleted: result.count };
   }
   @Post('downloads/:jobId/cancel') @HttpCode(200)
   async cancel(@Param('jobId') id: string) {
@@ -101,10 +138,7 @@ export class WallpapersController {
   async remove(@Param('workshopId') id: string) {
     assertWorkshopId(id); const wallpaper = await this.find(id);
     if (wallpaper.status !== 'downloaded') throw new ConflictException('仅已下载壁纸可删除');
-    const active = await this.infra.db.downloadJob.findFirst({ where: { workshopId: id, status: { in: [...ACTIVE_DOWNLOAD_STATUSES] } } }); if (active) throw new ConflictException('存在活跃任务');
-    const changed = await this.infra.db.wallpaper.updateMany({ where: { workshopId: id, status: 'downloaded' }, data: { status: 'deleting' } }); if (!changed.count) throw new ConflictException('壁纸状态已变化');
-    const deleteJobId = randomUUID(); await this.infra.deletions.add('delete', { deleteJobId, workshopId: id }, { jobId: deleteJobId });
-    return { deleteJobId };
+    return { deleteJobId: await this.queueSourceDeletion(id) };
   }
   @Get('wallpapers/:workshopId/preview-descriptor')
   async preview(@Param('workshopId') id: string) {
@@ -135,6 +169,20 @@ export class WallpapersController {
     response.status(status).setHeader('Content-Length', end - start + 1);
     if (request.method === 'HEAD') { response.end(); return; }
     const stream = createReadStream(file, { start, end }); stream.on('error', () => response.destroy()); stream.pipe(response);
+  }
+  private async queueSourceDeletion(workshopId: string): Promise<string> {
+    const active = await this.infra.db.downloadJob.findFirst({ where: { workshopId, status: { in: [...ACTIVE_DOWNLOAD_STATUSES] } } });
+    if (active) throw new ConflictException('存在活跃任务');
+    const changed = await this.infra.db.wallpaper.updateMany({ where: { workshopId, status: 'downloaded' }, data: { status: 'deleting' } });
+    if (!changed.count) throw new ConflictException('壁纸状态已变化');
+    const deleteJobId = randomUUID();
+    try {
+      await this.infra.deletions.add('delete', { deleteJobId, workshopId }, { jobId: deleteJobId });
+      return deleteJobId;
+    } catch {
+      await this.infra.db.wallpaper.updateMany({ where: { workshopId, status: 'deleting' }, data: { status: 'downloaded' } });
+      throw new ServiceUnavailableException({ code: 'QUEUE_UNAVAILABLE', message: '删除队列不可用，请稍后重试' });
+    }
   }
   private async enqueueDownload(job: { id: string; workshopId: string }): Promise<void> {
     try {

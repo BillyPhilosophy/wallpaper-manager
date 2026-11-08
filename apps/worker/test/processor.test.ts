@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { stagingWorkshopDirectory } from '@wallpaper-manager/wallpaper-files';
-import { DownloadProcessor, sanitizeWorkerError } from '../src/processor';
+import { deleteWallpaper, DownloadProcessor, sanitizeWorkerError } from '../src/processor';
 import type { SteamClient } from '../src/steam';
 
 describe('worker errors', () => {
@@ -68,6 +68,21 @@ describe('DepotDownloader processing', () => {
       expect(steam.download).not.toHaveBeenCalled();
       expect(downloadJob.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'succeeded' }) }));
       expect(wallpaper.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'downloaded' }) }));
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('permanently removes source files and deletes wallpaper records for cascading jobs', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'wallpaper-manager-delete-'));
+    const source = path.join(root, 'steam-data', 'steamapps', 'workshop', 'content', '431960', '123');
+    await mkdir(source, { recursive: true });
+    await writeFile(path.join(source, 'project.json'), '{"type":"scene"}');
+    const db = { wallpaper: { deleteMany: vi.fn().mockResolvedValue({ count: 1 }), updateMany: vi.fn() } };
+    try {
+      await deleteWallpaper({ deleteJobId: crypto.randomUUID(), workshopId: '123' }, path.join(root, 'steam-data'), path.join(root, 'trash'), db as any);
+      expect(db.wallpaper.deleteMany).toHaveBeenCalledWith({ where: { workshopId: '123', status: 'deleting' } });
+      await expect(stat(source)).rejects.toMatchObject({ code: 'ENOENT' });
     } finally {
       await rm(root, { recursive: true, force: true });
     }

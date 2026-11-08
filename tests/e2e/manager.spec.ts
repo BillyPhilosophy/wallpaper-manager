@@ -160,11 +160,26 @@ test('failed download records can be removed individually and cleared', async ({
   await page.route('**/api/downloads/failed', (route) => { jobs = []; return route.fulfill({ json: { deleted: 1 } }); });
   await page.goto('/downloads');
   await page.getByRole('button', { name: '删除记录', exact: true }).first().click();
+  await page.getByRole('button', { name: '仅删除记录', exact: true }).click();
   await expect(page.getByRole('link', { name: '工坊 123' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: '工坊 456' })).toBeVisible();
   page.once('dialog', (dialog) => void dialog.accept());
   await page.getByRole('button', { name: '清空失败记录', exact: true }).click();
   await expect(page.getByText('暂无下载任务。去工坊搜索一张喜欢的壁纸吧。')).toBeVisible();
+});
+test('completed records can delete local sources after confirmation and preview', async ({ page }) => {
+  const completed = { id: '6f67e62b-8a27-4d2b-a77f-e42c67538e45', workshopId: '123', status: 'succeeded', attempt: 1, errorCode: null, errorMessage: null, createdAt: new Date().toISOString(), startedAt: null, finishedAt: null };
+  let deleteUrl = '';
+  await page.route('**/api/downloads?**', (route) => route.fulfill({ json: { items: [completed], page: 1, pageSize: 20, total: 1 } }));
+  await page.route('**/api/downloads/deletion-preview?**', (route) => route.fulfill({ json: { items: [{ workshopId: '123', title: 'Aurora Landscape', officialPreviewUrl: null }] } }));
+  await page.route(`**/api/downloads/${completed.id}?deleteSource=true`, (route) => { deleteUrl = route.request().url(); return route.fulfill({ json: { deleted: 0, deleteJobId: crypto.randomUUID() } }); });
+  await page.goto('/downloads');
+  await page.getByRole('button', { name: '删除记录', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: '确认删除？' })).toBeVisible();
+  await page.getByRole('checkbox', { name: '同时删除本地源文件及所有关联记录' }).check();
+  await expect(page.getByText('Aurora Landscape')).toBeVisible();
+  await page.getByRole('button', { name: '删除文件和记录', exact: true }).click();
+  await expect.poll(() => deleteUrl).toContain('deleteSource=true');
 });
 test('downloaded video supports local playback and fullscreen preview', async ({ page }) => {
   const video = { ...item, type: 'video', title: 'Local video', localStatus: 'downloaded' };
