@@ -40,19 +40,20 @@ async function steamFetch(network: SteamNetworkController | undefined, url: stri
 export class WorkshopController {
   constructor(private readonly infra: Infrastructure) {}
   @Get('search')
-  async search(@Query('q') q = '', @Query('cursor') cursor = '*', @Query('pageSize') size = '20', @Query('type') type = '', @Query('rating') rating = '') {
+  async search(@Query('q') q = '', @Query('page') pageValue = '1', @Query('pageSize') size = '20', @Query('type') type = '', @Query('rating') rating = '') {
     const pageSize = Math.min(Math.max(Number(size) || 20, 1), 50); const key = process.env.STEAM_WEB_API_KEY;
+    const page = Math.min(Math.max(Math.trunc(Number(pageValue)) || 1, 1), 1000);
     if (!key) throw new ServiceUnavailableException({ code: 'STEAM_API_UNAVAILABLE', message: '未配置 Steam Web API Key' });
     const types = filterValues(type, Object.keys(SEARCH_TYPE_TAGS), '无效类型').map((value) => SEARCH_TYPE_TAGS[value as keyof typeof SEARCH_TYPE_TAGS]);
     const ratings = filterValues(rating, Object.keys(SEARCH_RATING_TAGS), '无效内容分级').map((value) => SEARCH_RATING_TAGS[value as keyof typeof SEARCH_RATING_TAGS]);
-    const params = new URLSearchParams({ key, appid: '431960', query_type: '0', page: '1', numperpage: String(pageSize), cursor: cursor || '*', return_metadata: 'true', return_short_description: 'true', return_tags: 'true', search_text: q.slice(0, 200) });
+    const params = new URLSearchParams({ key, appid: '431960', query_type: '0', page: String(page), numperpage: String(pageSize), return_metadata: 'true', return_short_description: 'true', return_tags: 'true', search_text: q.slice(0, 200) });
     [types, ratings].filter((tags) => tags.length).forEach((tags, group) => tags.forEach((tag, index) => params.set(`taggroups[${group}][tags][${index}]`, tag)));
     const body = await cached(`search:${params}`, () => steamFetch(this.infra.steamNetwork, `https://api.steampowered.com/IPublishedFileService/QueryFiles/v1/?${params}`));
     const details = body.response?.publishedfiledetails || []; const ids = details.map((entry: any) => String(entry.publishedfileid));
     const local = await this.infra.db.wallpaper.findMany({ where: { workshopId: { in: ids } } }); const states = new Map(local.map((entry) => [entry.workshopId, entry]));
     const items = details.map((entry: any) => item(entry, states.get(String(entry.publishedfileid))));
     await Promise.all(items.map((entry: WorkshopItem) => this.infra.db.wallpaper.updateMany({ where: { workshopId: entry.workshopId }, data: { title: entry.title, description: entry.description, officialPreviewUrl: entry.officialPreviewUrl, metadataJson: JSON.stringify(entry.metadataJson) } })));
-    return { items, cursor: body.response?.next_cursor || null, total: Number(body.response?.total || items.length) };
+    return { items, cursor: null, total: Number(body.response?.total || items.length) };
   }
   @Get('items/:workshopId')
   async detail(@Param('workshopId') id: string) {

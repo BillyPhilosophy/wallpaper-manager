@@ -48,14 +48,16 @@ describe('Steam subscription synchronization', () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ response: { total: 1, next_cursor: 'next', publishedfiledetails: [{ publishedfileid: '123', title: 'Filtered scene', tags: [{ tag: 'Scene' }, { tag: 'Everyone' }] }] } })));
     vi.stubGlobal('fetch', fetchMock);
     const db = { wallpaper: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn().mockResolvedValue({ count: 0 }) } };
-    const result = await new WorkshopController({ db } as any).search('forest', '*', '20', 'scene,video', 'everyone,pg13');
+    const result = await new WorkshopController({ db } as any).search('forest', '2', '20', 'scene,video', 'everyone,pg13');
     const params = new URL(String(fetchMock.mock.calls[0][0])).searchParams;
+    expect(params.get('page')).toBe('2');
+    expect(params.has('cursor')).toBe(false);
     expect(params.get('taggroups[0][tags][0]')).toBe('Scene');
     expect(params.get('taggroups[0][tags][1]')).toBe('Video');
     expect(params.get('taggroups[1][tags][0]')).toBe('Everyone');
     expect(params.get('taggroups[1][tags][1]')).toBe('PG13');
     expect(result.total).toBe(1);
-    expect(result.cursor).toBe('next');
+    expect(result.cursor).toBeNull();
   });
 
   it('rejects filters that cannot be represented by upstream tags', async () => {

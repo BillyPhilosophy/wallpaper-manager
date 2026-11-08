@@ -51,11 +51,11 @@ test('known SteamID64 can synchronize subscriptions without Steam login', async 
   await page.getByRole('button', { name: '同步订阅列表', exact: true }).click();
   await expect.poll(() => requestBody).toBe('{"steamId":"76561197960265851"}');
 });
-test('search filters are preserved without requesting again after navigation', async ({ page }) => {
+test('search filters, page jumps and scroll position are preserved without another request', async ({ page }) => {
   const requests: string[] = [];
   await page.route('**/api/workshop/search**', (route) => {
     requests.push(route.request().url());
-    return route.fulfill({ json: { items: [item], cursor: null, total: 1 } });
+    return route.fulfill({ json: { items: [item], cursor: null, total: 200 } });
   });
   await page.route('**/api/wallpapers?**', (route) => route.fulfill({ json: { items: [], page: 1, pageSize: 24, total: 0 } }));
   await page.goto('/');
@@ -72,14 +72,58 @@ test('search filters are preserved without requesting again after navigation', a
   expect(params.get('type')).toBe('scene');
   expect(params.get('rating')).toBe('everyone');
   await page.evaluate(() => { document.documentElement.style.minHeight = '2000px'; window.scrollTo(0, 500); });
-  expect(await page.evaluate(() => window.scrollY)).toBe(500);
+  await page.getByLabel('页码', { exact: true }).fill('2');
+  await page.getByRole('button', { name: '跳转', exact: true }).click();
+  await expect.poll(() => requests.length).toBe(4);
+  expect(new URL(requests[3]).searchParams.get('page')).toBe('2');
+  expect(new URL(requests[3]).searchParams.has('cursor')).toBe(false);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  await page.evaluate(() => window.scrollTo(0, 500));
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
   await page.getByRole('link', { name: '我的壁纸', exact: true }).click();
   await page.getByRole('link', { name: '工坊搜索', exact: true }).click();
   await expect(page.getByLabel('搜索工坊')).toHaveValue('Aurora');
+  await expect(page.getByLabel('页码', { exact: true })).toHaveValue('2');
   await expect(page.getByText('Aurora Landscape')).toBeVisible();
-  expect(requests).toHaveLength(3);
+  expect(requests).toHaveLength(4);
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(500);
+});
+test('library store restores filters and page independently from search', async ({ page }) => {
+  const requests: string[] = [];
+  await page.route('**/api/wallpapers?**', (route) => { requests.push(route.request().url()); return route.fulfill({ json: { items: [], page: 1, pageSize: 24, total: 48 } }); });
+  await page.route('**/api/workshop/search**', (route) => route.fulfill({ json: { items: [], cursor: null, total: 0 } }));
+  await page.goto('/library');
+  await expect(page.getByText('还没有匹配的壁纸。')).toBeVisible();
+  await page.getByLabel('筛选标题或 ID', { exact: true }).fill('Scene');
+  await expect.poll(() => requests.some((url) => new URL(url).searchParams.get('q') === 'Scene')).toBe(true);
+  await page.getByLabel('页码', { exact: true }).fill('2');
+  await page.getByRole('button', { name: '跳转', exact: true }).click();
+  await expect.poll(() => requests.some((url) => { const params = new URL(url).searchParams; return params.get('q') === 'Scene' && params.get('page') === '2'; })).toBe(true);
+  await page.getByRole('link', { name: '工坊搜索', exact: true }).click();
+  await page.getByLabel('搜索工坊').fill('Independent');
+  const beforeReturn = requests.length;
+  await page.getByRole('link', { name: '我的壁纸', exact: true }).click();
+  await expect(page.getByLabel('筛选标题或 ID', { exact: true })).toHaveValue('Scene');
+  await expect(page.getByLabel('页码', { exact: true })).toHaveValue('2');
+  await expect.poll(() => requests.length).toBeGreaterThan(beforeReturn);
+});
+test('search and library expose loading states during requests', async ({ page }) => {
+  page.on('pageerror', (error) => console.error(`[browser] ${error.message}`));
+  let releaseSearch!: () => void;
+  const searchGate = new Promise<void>((resolve) => { releaseSearch = resolve; });
+  await page.route('**/api/workshop/search**', async (route) => { await searchGate; await route.fulfill({ json: { items: [item], cursor: null, total: 1 } }); });
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('heading', { name: '发现下一张壁纸' })).toBeVisible();
+  await expect(page.getByRole('status')).toHaveText('正在连接 Steam 创意工坊…');
+  releaseSearch();
+  await expect(page.getByText('Aurora Landscape')).toBeVisible();
+  let releaseLibrary!: () => void;
+  const libraryGate = new Promise<void>((resolve) => { releaseLibrary = resolve; });
+  await page.route('**/api/wallpapers?**', async (route) => { await libraryGate; await route.fulfill({ json: { items: [], page: 1, pageSize: 24, total: 0 } }); });
+  await page.getByRole('link', { name: '我的壁纸', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('正在读取壁纸库…');
+  releaseLibrary();
+  await expect(page.getByText('还没有匹配的壁纸。')).toBeVisible();
 });
 test('download center displays upstream progress and rate', async ({ page }) => {
   const progress = { downloadedBytes: '50000000', totalBytes: '100000000', networkBytes: '25000000', bytesPerSecond: '1000000', percent: 50, updatedAt: new Date().toISOString() };
