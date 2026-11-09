@@ -5,7 +5,7 @@ import type { SteamNetworkController } from '@wallpaper-manager/steam-network';
 import { filterValues, Infrastructure } from '../common';
 
 const SEARCH_TYPE_TAGS = { scene: 'Scene', web: 'Web', video: 'Video', image: 'Image', application: 'Application' } as const;
-const SEARCH_RATING_TAGS = { everyone: 'Everyone', pg13: 'PG13', mature: 'Mature' } as const;
+const SEARCH_RATING_TAGS = { everyone: 'Everyone', pg13: 'Questionable', mature: 'Mature' } as const;
 const SEARCH_SORTS = { vote: { queryType: 0 }, year: { queryType: 3, days: 365 }, month: { queryType: 3, days: 30 }, week: { queryType: 3, days: 7 }, day: { queryType: 3, days: 1 }, recent: { queryType: 1 }, votes: { queryType: 6 }, subscriptions: { queryType: 9 } } as const;
 const cache = new Map<string, { expires: number; value: unknown }>();
 const recentRequests: number[] = [];
@@ -16,7 +16,7 @@ function inferType(detail: any): WallpaperType {
 }
 function inferRating(detail: any): ContentRating {
   const tags = (detail.tags || []).map((tag: any) => String(tag.tag || tag));
-  const match = tags.find((tag: string) => ['g', 'everyone', 'pg13', 'r', 'mature'].includes(tag.toLowerCase()));
+  const match = tags.find((tag: string) => ['g', 'everyone', 'pg13', 'questionable', 'r', 'mature'].includes(tag.toLowerCase()));
   return contentRating(match);
 }
 function item(detail: any, local?: { status: string; type: string; contentRating: string; subscribed: boolean }): WorkshopItem {
@@ -51,10 +51,13 @@ export class WorkshopController {
     const order = SEARCH_SORTS[sort as keyof typeof SEARCH_SORTS];
     const types = filterValues(type, Object.keys(SEARCH_TYPE_TAGS), '无效类型').map((value) => SEARCH_TYPE_TAGS[value as keyof typeof SEARCH_TYPE_TAGS]);
     const ratings = filterValues(rating, Object.keys(SEARCH_RATING_TAGS), '无效内容分级').map((value) => SEARCH_RATING_TAGS[value as keyof typeof SEARCH_RATING_TAGS]);
+    // 分级用「排除法」：Steam Web API 的 taggroups 嵌套语法无效，requiredtags 又无法表达组内 OR+组间 AND。
+    // 已选分级作为白名单，把分级全集中未选中的项放入 excludedtags 剔除；全选时为空 = 不过滤。
+    const excludedRatings = rating ? Object.values(SEARCH_RATING_TAGS).filter((tag) => !ratings.includes(tag)) : [];
     const params = new URLSearchParams({ key, appid: '431960', query_type: String(order.queryType), page: String(page), numperpage: String(pageSize), match_all_tags: 'false', return_metadata: 'true', return_short_description: 'true', return_tags: 'true', search_text: q.slice(0, 200) });
     if ('days' in order) params.set('days', String(order.days));
     types.forEach((tag, index) => params.set(`requiredtags[${index}]`, tag));
-    ratings.forEach((tag, index) => params.set(`taggroups[0][tags][${index}]`, tag));
+    excludedRatings.forEach((tag, index) => params.set(`excludedtags[${index}]`, tag));
     const body = await cached(`search:${params}`, () => steamFetch(this.infra.steamNetwork, `https://api.steampowered.com/IPublishedFileService/QueryFiles/v1/?${params}`));
     const details = body.response?.publishedfiledetails || []; const ids = details.map((entry: any) => String(entry.publishedfileid));
     const local = await this.infra.db.wallpaper.findMany({ where: { workshopId: { in: ids } } }); const states = new Map(local.map((entry) => [entry.workshopId, entry]));

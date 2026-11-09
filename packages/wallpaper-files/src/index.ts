@@ -28,7 +28,7 @@ export interface ProjectInfo { type: WallpaperType; contentRating: ContentRating
 function stringValue(value: unknown): string | undefined { return typeof value === 'string' && value.length ? value : undefined; }
 export function contentRating(value: unknown): ContentRating {
   const rating = stringValue(value)?.toLowerCase();
-  return rating === 'g' || rating === 'everyone' ? 'everyone' : rating === 'pg13' ? 'pg13' : rating === 'r' || rating === 'mature' ? 'mature' : 'unrated';
+  return rating === 'g' || rating === 'everyone' ? 'everyone' : rating === 'pg13' || rating === 'questionable' ? 'pg13' : rating === 'r' || rating === 'mature' ? 'mature' : 'unrated';
 }
 export async function inspectWallpaper(directory: string): Promise<ProjectInfo> {
   const raw = await fs.readFile(path.join(directory, 'project.json'), 'utf8').catch((error: NodeJS.ErrnoException) => {

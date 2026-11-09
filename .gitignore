@@ -7,3 +7,5 @@ coverage/
 playwright-report/
 test-results/
 .DS_Store
+# TypeScript 构建缓存
+*.tsbuildinfo
