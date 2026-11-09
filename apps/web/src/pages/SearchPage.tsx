@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import type { WorkshopSearchResult } from '@wallpaper-manager/contracts';
 import { api, post } from '../api';
 import { useRemote } from '../hooks';
@@ -37,6 +37,7 @@ export function SearchPage() {
   const maxPage = Math.max(1, Math.ceil((data?.total || 0) / 20));
   useEffect(() => { setPageInput(String(page)); }, [page]);
   useEffect(() => { if (data && page > maxPage) goToPage(maxPage); }, [data, page, maxPage]);
+  const pendingScrollRestore = useRef(true);
   useEffect(() => {
     let navigating = false;
     const rememberScroll = () => {
@@ -47,14 +48,18 @@ export function SearchPage() {
     window.addEventListener('scroll', rememberScroll, { passive: true });
     window.addEventListener('popstate', prepareNavigation);
     document.addEventListener('click', click, true);
-    const frame = requestAnimationFrame(() => { window.scrollTo(0, searchSession.scrollY); navigating = false; });
     return () => {
-      cancelAnimationFrame(frame);
       window.removeEventListener('scroll', rememberScroll);
       window.removeEventListener('popstate', prepareNavigation);
       document.removeEventListener('click', click, true);
     };
   }, []);
+  useEffect(() => {
+    if (loading || !pendingScrollRestore.current) return;
+    pendingScrollRestore.current = false;
+    const frame = requestAnimationFrame(() => window.scrollTo(0, searchSession.scrollY));
+    return () => cancelAnimationFrame(frame);
+  }, [loading]);
   const refresh = () => { invalidateSearch(requestKey); reload(); };
   const download = async (id: string) => { setBusy(id); try { await post(`/wallpapers/${id}/download`); refresh(); } catch (error) { alert(error instanceof Error ? error.message : '下载失败'); } finally { setBusy(''); } };
   const submit = (event: FormEvent) => {
