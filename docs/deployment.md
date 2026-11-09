@@ -16,6 +16,7 @@ cp deploy/.env.example deploy/.env
 DOCKERHUB_USERNAME=local
 IMAGE_TAG=latest
 WALLPAPER_DATA_ROOT=/srv/wallpaper-manager
+# STEAM_DATA_ROOT=/mnt/data/data/steam-data
 STEAM_WEB_API_KEY=
 # STEAMGUARD_CLI_PASSKEY_FILE=/steam-config/steamguard/passkey
 MAX_QUEUE_LENGTH=20
@@ -26,13 +27,17 @@ MAX_QUEUE_LENGTH=20
 NO_PROXY=localhost,127.0.0.1,web,api,worker,redis
 ```
 
-`WALLPAPER_DATA_ROOT` 是所有应用数据的宿主机根目录，可改为 `/mnt/wallpaper-disk/wallpaper-manager` 等外接硬盘路径。未设置时使用 `/srv/wallpaper-manager`。容器内部路径保持固定，不需要修改。
+`WALLPAPER_DATA_ROOT` 是应用数据的宿主机根目录，存放 `app-data`（SQLite 数据库）、`staging`、`steam-config`、`trash` 等小文件高频读写数据。未设置时使用 `/srv/wallpaper-manager`。容器内部路径保持固定，不需要修改。
+
+`STEAM_DATA_ROOT` 单独控制壁纸文件目录（大文件、读多写少），默认指向 `${WALLPAPER_DATA_ROOT}/steam-data`，与旧部署兼容。可将其指向独立的外接硬盘路径（如 `/mnt/data/data/steam-data`），把大容量壁纸放外接盘，而让数据库和队列的高频 `fsync` 留在更稳定的本地盘上——这能避免移动硬盘在 SQLite/Redis 频繁写入下出现 `I/O error`。
+
+> 注意：不建议把 `WALLPAPER_DATA_ROOT`（含 SQLite 数据库）直接放移动硬盘。USB 转接桥 + ext4 + 高频 fsync 的组合容易触发 EIO，导致 `docker compose` 重建时 `init` 服务 `chown` 报 `I/O error` 而失败。将数据库留在本地盘、仅 `steam-data` 放移动盘是推荐做法。
 
 Worker 和发布工作流只提供一套原生 ARM64 镜像，不再区分 Pi 5 Box64 变体。自动手机令牌及可选的 maFiles passkey 配置见 `docs/steam-login.md`。
 
-Compose 的一次性 `init` 服务会自动创建 `app-data`、`staging`、`steam-data`、`steam-config` 和 `trash`，将应用目录所有权设为 UID/GID `1000:1000`，并将 `steam-config` 权限设为 `0700`。初始化成功后退出，API 和 Worker 仅在初始化成功后启动，重复启动不会清除已有数据。
+Compose 的一次性 `init` 服务会自动创建 `app-data`、`staging`、`steam-config`、`trash`（本地盘）和 `steam-data`（可外接盘），将应用目录所有权设为 UID/GID `1000:1000`，并将 `steam-config` 权限设为 `0700`。对 `steam-data` 的 `chown`/`chmod` 采用「尽力而为」策略：若该盘文件系统不支持属主变更或报 EIO，会跳过而非让初始化失败。初始化成功后退出，API 和 Worker 仅在初始化成功后启动，重复启动不会清除已有数据。
 
-`staging`、`steam-data`、`trash` 必须保持在同一文件系统。若 DSH 使用其他用户，应通过共享组或严格的最小 ACL 授予 `steam-data` 读权限，不要开放 `0777`。
+`staging`、`trash` 必须与 `app-data` 保持在同一文件系统（即 `WALLPAPER_DATA_ROOT` 内）。`steam-data` 可以在不同文件系统：发布与删除时若 `rename` 报 `EXDEV`（跨设备），会自动退化为「复制 + 删除源」完成移动。若 DSH 使用其他用户，应通过共享组或严格的最小 ACL 授予 `steam-data` 读权限，不要开放 `0777`。
 
 如果数据根目录位于外接硬盘，启动前必须确认硬盘已挂载。容器中的初始化服务无法可靠检测宿主机是否漏挂硬盘；否则 Docker 可能在系统盘创建同名目录并继续写入。
 

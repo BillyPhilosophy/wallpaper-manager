@@ -6,12 +6,19 @@ services:
       - /bin/sh
       - -ec
       - |
-        mkdir -p /wallpaper-manager/app-data /wallpaper-manager/staging /wallpaper-manager/steam-data /wallpaper-manager/steam-config /wallpaper-manager/trash
-        chown 1000:1000 /wallpaper-manager/app-data /wallpaper-manager/staging /wallpaper-manager/steam-data /wallpaper-manager/steam-config /wallpaper-manager/trash
-        chmod 0755 /wallpaper-manager/app-data /wallpaper-manager/staging /wallpaper-manager/steam-data /wallpaper-manager/trash
-        chmod 0700 /wallpaper-manager/steam-config
+        # 本地盘：小文件高频读写（SQLite/staging/config/trash）
+        mkdir -p /local/app-data /local/staging /local/steam-config /local/trash
+        chown 1000:1000 /local/app-data /local/staging /local/steam-config /local/trash
+        chmod 0755 /local/app-data /local/staging /local/trash
+        chmod 0700 /local/steam-config
+        # 壁纸大文件盘（可挂移动硬盘）：某些文件系统/转接桥 chown 会报 EIO，
+        # 这里不强制 chown，只保证目录存在并尽力放宽权限，失败不致命。
+        mkdir -p /steam-data
+        chown 1000:1000 /steam-data 2>/dev/null || echo "init: skip chown on /steam-data (unsupported fs or EIO)"
+        chmod 0755 /steam-data 2>/dev/null || echo "init: skip chmod on /steam-data"
     volumes:
-      - ${WALLPAPER_DATA_ROOT:-/srv/wallpaper-manager}:/wallpaper-manager
+      - ${WALLPAPER_DATA_ROOT:-/srv/wallpaper-manager}:/local
+      - ${STEAM_DATA_ROOT:-${WALLPAPER_DATA_ROOT:-/srv/wallpaper-manager}/steam-data}:/steam-data
     restart: "no"
   web:
     image: ${DOCKERHUB_USERNAME:-local}/wallpaper-manager-web:${IMAGE_TAG:-latest}
@@ -40,7 +47,7 @@ services:
     extra_hosts: ["host.docker.internal:host-gateway"]
     volumes:
       - ${WALLPAPER_DATA_ROOT:-/srv/wallpaper-manager}/app-data:/app-data
-      - ${WALLPAPER_DATA_ROOT:-/srv/wallpaper-manager}/steam-data:/wallpaper-manager/steam-data:ro
+      - ${STEAM_DATA_ROOT:-${WALLPAPER_DATA_ROOT:-/srv/wallpaper-manager}/steam-data}:/wallpaper-manager/steam-data:ro
     depends_on:
       init: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
@@ -75,7 +82,9 @@ services:
     extra_hosts: ["host.docker.internal:host-gateway"]
     volumes:
       - ${WALLPAPER_DATA_ROOT:-/srv/wallpaper-manager}/app-data:/app-data
-      - ${WALLPAPER_DATA_ROOT:-/srv/wallpaper-manager}:/wallpaper-manager
+      - ${WALLPAPER_DATA_ROOT:-/srv/wallpaper-manager}/staging:/wallpaper-manager/staging
+      - ${WALLPAPER_DATA_ROOT:-/srv/wallpaper-manager}/trash:/wallpaper-manager/trash
+      - ${STEAM_DATA_ROOT:-${WALLPAPER_DATA_ROOT:-/srv/wallpaper-manager}/steam-data}:/wallpaper-manager/steam-data
       - ${WALLPAPER_DATA_ROOT:-/srv/wallpaper-manager}/steam-config:/steam-config
     depends_on:
       init: { condition: service_completed_successfully }

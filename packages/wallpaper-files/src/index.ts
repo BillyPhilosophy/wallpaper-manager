@@ -139,19 +139,30 @@ export async function directorySize(directory: string): Promise<bigint> {
   }
   return total;
 }
+async function moveAcrossDevices(source: string, destination: string): Promise<void> {
+  try {
+    await fs.rename(source, destination);
+  } catch (error) {
+    // staging 与 steam-data 可能在不同文件系统（如 steam-data 挂在移动硬盘），
+    // rename 会抛 EXDEV；此时退化为 复制 + 删除源。
+    if ((error as NodeJS.ErrnoException).code !== 'EXDEV') throw error;
+    await fs.cp(source, destination, { recursive: true, errorOnExist: true, force: false });
+    await fs.rm(source, { recursive: true, force: true });
+  }
+}
 export async function publishDirectory(source: string, steamRoot: string, workshopId: string): Promise<string> {
   await assertSafeTree(source);
   const destination = wallpaperDirectory(steamRoot, workshopId);
   await fs.mkdir(path.dirname(destination), { recursive: true });
   try { await fs.lstat(destination); throw new WallpaperFileError('PUBLISH_CONFLICT', '目标壁纸已存在'); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
-  await fs.rename(source, destination);
+  await moveAcrossDevices(source, destination);
   return destination;
 }
 export async function moveToTrash(steamRoot: string, trashDir: string, workshopId: string, deleteJobId: string = randomUUID()): Promise<string> {
   const source = wallpaperDirectory(steamRoot, workshopId);
   const target = path.join(trashDir, safeJobId(deleteJobId), assertWorkshopId(workshopId));
   await fs.mkdir(path.dirname(target), { recursive: true });
-  await fs.rename(source, target);
+  await moveAcrossDevices(source, target);
   return target;
 }
 export function previewDescriptor(workshopId: string, type: WallpaperType, entry: string | null, fallbackPreviewUrl: string | null, downloaded: boolean): PreviewDescriptor {
