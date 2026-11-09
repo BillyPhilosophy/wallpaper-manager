@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, mkdir, readFile, copyFile, writeFile, rm, lstat } from 'node:fs/promises';
-import * as fsPromises from 'node:fs/promises';
+import { promises as fsPromises } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
