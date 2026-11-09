@@ -29,17 +29,17 @@ NO_PROXY=localhost,127.0.0.1,web,api,worker,redis
 
 `WALLPAPER_DATA_ROOT` 是应用数据的宿主机根目录，存放 `app-data`（SQLite 数据库）、`staging`、`steam-config`、`trash` 等小文件高频读写数据。未设置时使用 `/srv/wallpaper-manager`。容器内部路径保持固定，不需要修改。
 
-`STEAM_DATA_ROOT` 单独控制壁纸文件目录（大文件、读多写少），默认指向 `${WALLPAPER_DATA_ROOT}/steam-data`，与旧部署兼容。可将其指向独立的外接硬盘路径（如 `/mnt/data/data/steam-data`），把大容量壁纸放外接盘，而让数据库和队列的高频 `fsync` 留在更稳定的本地盘上——这能避免移动硬盘在 SQLite/Redis 频繁写入下出现 `I/O error`。
+`STEAM_DATA_ROOT` 单独控制壁纸文件目录（大文件、读多写少），默认指向 `${WALLPAPER_DATA_ROOT}/steam-data`，与旧部署兼容。可将其指向独立的外接硬盘路径（如 `/mnt/data/data/steam-data`），把大容量壁纸放外接盘，而让数据库和 staging 的高频写入留在本地盘上。拆盘用于隔离移动盘故障的影响，不能修复 USB 线、供电、转接桥或盘体造成的硬件 EIO。
 
-> 注意：不建议把 `WALLPAPER_DATA_ROOT`（含 SQLite 数据库）直接放移动硬盘。USB 转接桥 + ext4 + 高频 fsync 的组合容易触发 EIO，导致 `docker compose` 重建时 `init` 服务 `chown` 报 `I/O error` 而失败。将数据库留在本地盘、仅 `steam-data` 放移动盘是推荐做法。
+> 注意：不建议把 `WALLPAPER_DATA_ROOT`（含 SQLite 数据库）直接放不稳定的移动硬盘。将数据库留在本地盘、仅 `steam-data` 放移动盘是推荐做法；移动盘出现持续 I/O 错误时仍需检查硬件并备份，不能只靠跳过初始化错误继续运行。
 
 Worker 和发布工作流只提供一套原生 ARM64 镜像，不再区分 Pi 5 Box64 变体。自动手机令牌及可选的 maFiles passkey 配置见 `docs/steam-login.md`。
 
 Compose 的一次性 `init` 服务会自动创建 `app-data`、`staging`、`steam-config`、`trash`（本地盘）和 `steam-data`（可外接盘），将应用目录所有权设为 UID/GID `1000:1000`，并将 `steam-config` 权限设为 `0700`。对 `steam-data` 的 `chown`/`chmod` 采用「尽力而为」策略：若该盘文件系统不支持属主变更或报 EIO，会跳过而非让初始化失败。初始化成功后退出，API 和 Worker 仅在初始化成功后启动，重复启动不会清除已有数据。
 
-`staging`、`trash` 必须与 `app-data` 保持在同一文件系统（即 `WALLPAPER_DATA_ROOT` 内）。`steam-data` 可以在不同文件系统：发布与删除时若 `rename` 报 `EXDEV`（跨设备），会自动退化为「复制 + 删除源」完成移动。若 DSH 使用其他用户，应通过共享组或严格的最小 ACL 授予 `steam-data` 读权限，不要开放 `0777`。
+`staging`、`trash` 必须与 `app-data` 保持在同一文件系统（即 `WALLPAPER_DATA_ROOT` 内）。`steam-data` 可以在不同文件系统：发布与删除时若 `rename` 报 `EXDEV`（跨设备），会自动退化为「复制 + 删除源」完成移动；跨盘复制不是原子操作，中断后需要检查部分目标目录。若 DSH 使用其他用户，应通过共享组或严格的最小 ACL 授予 `steam-data` 读权限，不要开放 `0777`。
 
-如果数据根目录位于外接硬盘，启动前必须确认硬盘已挂载。容器中的初始化服务无法可靠检测宿主机是否漏挂硬盘；否则 Docker 可能在系统盘创建同名目录并继续写入。
+如果 `STEAM_DATA_ROOT` 位于外接硬盘，启动前必须用 `findmnt` 确认预期分区已挂载，并检查目标目录存在。仅对空挂载点执行 `ls` 不足以证明硬盘已挂载；否则 Docker 可能在系统盘创建同名目录并继续写入。
 
 如需通过宿主机代理访问 Steam，设置 `STEAM_PROXY_URL`（也可使用 `HTTP_PROXY`/`HTTPS_PROXY`），例如 `http://host.docker.internal:7890`。Compose 会把该主机名映射到 Docker 宿主机网关，代理服务应监听 `0.0.0.0` 并允许容器网段访问。`STEAM_NETWORK_MODE` 支持 `direct`、`proxy`、`auto`：配置代理时默认 `proxy`，未配置时默认 `direct`。`auto` 先进行 5 秒直连探测，成功保持 15 分钟，只在网络错误时切代理，HTTP 状态和认证错误不会触发切换。保留 `NO_PROXY` 中的内部服务名，避免内部请求进入代理。修改后重建 API 和 Worker 容器。
 
@@ -71,7 +71,7 @@ API Key 也可通过 Compose 支持的安全密钥注入机制提供；不要提
 
 迁移仅由 API 容器启动命令执行，Worker 等待 API 健康后启动。Redis 已开启 AOF，Worker 并发固定为 1。Worker 使用固定版本的原生 ARM64 DepotDownloader 和 steamguard-cli，不再需要 Box64 或 32 位运行库；真实登录、自动 Guard 和下载仍需在目标 ARM64 Linux 设备上实测。
 
-修改 `WALLPAPER_DATA_ROOT` 不会自动迁移已有数据。切换路径前应停止服务，将原数据完整迁移到新根目录并检查权限，同时更新 DSH 的共享目录配置。
+修改 `WALLPAPER_DATA_ROOT` 或 `STEAM_DATA_ROOT` 不会自动迁移已有数据。切换路径前应停止服务，将原数据完整迁移并校验后再修改配置；保留旧副本直到服务验证通过，同时更新 DSH 的实际 `STEAM_DATA_ROOT` 共享目录配置。
 
 ## 备份和恢复
 

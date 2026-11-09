@@ -2,7 +2,7 @@
 
 基线为 `elysia395/dsh-wallpaper-engine` 插件 `1.4.0`（`cde8e9c66972f47f6d369f5e51484ca8fa48c9b5`）与 WebWallGL `3.0.0`。
 
-DSH Compose 服务增加以下只读挂载，其余配置保持不变。将示例中的 `/srv/wallpaper-manager` 替换为 Wallpaper Manager 在 `deploy/.env` 中配置的实际 `WALLPAPER_DATA_ROOT`：
+DSH Compose 服务增加以下只读挂载，其余配置保持不变。将示例中的 `/srv/wallpaper-manager/steam-data` 替换为 Wallpaper Manager 在 `deploy/.env` 中配置的实际 `STEAM_DATA_ROOT`；如果未设置该变量，默认值为 `${WALLPAPER_DATA_ROOT}/steam-data`：
 
 ```yaml
 services:
@@ -13,7 +13,7 @@ services:
       DSH_WE_STEAM_ROOT: /wallpaper-manager/steam-data
 ```
 
-宿主机直接运行时设置 `DSH_WE_STEAM_ROOT=/srv/wallpaper-manager/steam-data`。变量指向包含 `steamapps/` 的 Steam 根，不是 `431960` 目录。无需伪造 `libraryfolders.vdf`。不要向 DSH 挂载 `staging`、`app-data` 或 `steam-config`。
+宿主机直接运行时，将 `DSH_WE_STEAM_ROOT` 设置为同一个实际 `STEAM_DATA_ROOT`。变量指向包含 `steamapps/` 的 Steam 根，不是 `431960` 目录。无需伪造 `libraryfolders.vdf`。不要向 DSH 挂载 `staging`、`app-data` 或 `steam-config`。
 
 下载完成后打开或刷新 DSH 壁纸库，由 `/wallpaper-engine/inventory` 请求触发清单重建。不能承诺固定 30 秒自动出现。网站删除采用原子移动，刷新清单后对应项目应消失。
 

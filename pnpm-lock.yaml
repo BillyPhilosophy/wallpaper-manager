@@ -65,6 +65,9 @@ importers:
       undici:
         specifier: ^8.12.4
         version: 8.12.4
+      webwallgl:
+        specifier: 3.0.0
+        version: 3.0.0
     devDependencies:
       '@nestjs/cli':
         specifier: ^11.0.16

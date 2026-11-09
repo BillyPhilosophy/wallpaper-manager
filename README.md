@@ -12,10 +12,10 @@
 - 查看官方图片、动图、视频及完整元数据。
 - 默认使用 Steam 手机 App 扫码登录，也支持账密登录、steamguard-cli 自动令牌和手工 Guard。
 - 下载、取消、重试和删除壁纸，展示真实任务阶段、字节占比和平均下载速率；没有可靠数据时不伪造百分比。
-- 使用固定版本的 `webwallgl@3.0.0` 在线预览已下载的 Scene／Web 壁纸，支持本地视频播放和全屏预览；引擎运行在隔离的沙箱 iframe 中。
+- 使用固定版本的 `webwallgl@3.0.0` 在线预览已下载的 Scene／Web 壁纸，支持鼠标移动、点击、本地视频播放和全屏预览。为兼容自用站点的 Basic Auth 与存储 API，Scene／Web 预览使用同源非严格沙箱；壁纸脚本因此能访问本站 API 和存储，仅限可信局域网单用户使用。
 - 搜索支持类型、内容分级和排序；设置页默认过滤成人及未分级内容，可主动关闭。
 - 与 DSH 共用同一份原始工坊文件，下载后即可在 DSH 壁纸库中使用。
-- 通过暂存目录、资源校验和原子发布，避免网站或 DSH 读取半成品。
+- 通过暂存目录、资源校验和同盘原子发布与跨盘完整复制，避免网站或 DSH 读取半成品。
 - 阻止 Application／EXE 壁纸，不执行壁纸目录中的第三方程序。
 
 Steam Web API Key 和 DepotDownloader 登录是两套独立配置。密码及 Guard 码不会写入数据库、BullMQ 任务或应用日志。
@@ -80,15 +80,16 @@ Key 只需要配置在服务端，与扫码或账密登录无关，也不需要�
 cp deploy/.env.example deploy/.env
 ```
 
-编辑 `deploy/.env`，至少设置 `DOCKERHUB_USERNAME` 和 `STEAM_WEB_API_KEY`。`WALLPAPER_DATA_ROOT` 默认为 `/srv/wallpaper-manager`，壁纸较多时建议改为外接硬盘路径，例如：
+编辑 `deploy/.env`，至少设置 `DOCKERHUB_USERNAME` 和 `STEAM_WEB_API_KEY`。`WALLPAPER_DATA_ROOT` 默认为 `/srv/wallpaper-manager`，存放 SQLite、staging、Steam 登录配置和 trash。壁纸大文件由 `STEAM_DATA_ROOT` 单独控制，默认仍在 `${WALLPAPER_DATA_ROOT}/steam-data`；需要外接硬盘时只拆分这一项，例如：
 
 ```env
-WALLPAPER_DATA_ROOT=/mnt/wallpaper-disk/wallpaper-manager
+WALLPAPER_DATA_ROOT=/srv/wallpaper-manager
+STEAM_DATA_ROOT=/mnt/wallpaper-disk/wallpaper-manager/steam-data
 ```
 
-启动时，Compose 的一次性 `init` 服务会自动创建所有数据目录并设置权限，无需手动执行建目录命令。`staging`、`steam-data` 和 `trash` 位于同一数据根目录，必须保持在同一文件系统。容器使用 UID/GID `1000:1000`，请确保 DSH 用户能够读取 `steam-data`，不要开放 `0777`。
+启动时，Compose 的一次性 `init` 服务会自动创建所有数据目录并设置权限，无需手动执行建目录命令。`staging`、`trash` 与数据库留在 `WALLPAPER_DATA_ROOT`；`steam-data` 可以跨文件系统，发布和删除会自动处理 `EXDEV`。容器使用 UID/GID `1000:1000`，请确保 DSH 用户能够读取 `steam-data`，不要开放 `0777`。
 
-如果数据目录位于外接硬盘，启动前必须确认硬盘已经挂载。容器无法可靠检测宿主机是否漏挂硬盘；否则 Docker 可能在系统盘创建同名目录。
+如果 `STEAM_DATA_ROOT` 位于外接硬盘，启动前必须确认硬盘已经挂载且目标目录真实存在。容器无法可靠检测宿主机是否漏挂硬盘；否则 Docker 可能在系统盘创建同名目录。
 
 ### 可选：通过宿主机代理访问 Steam
 
@@ -138,7 +139,7 @@ docker compose -f deploy/docker-compose.yml up -d
 
 回滚时在 `deploy/.env` 中设置 `IMAGE_TAG=sha-<完整提交哈希>`，再重新执行上述 `pull` 和 `up -d` 命令。
 
-修改 `WALLPAPER_DATA_ROOT` 不会自动迁移已有数据。切换路径前应停止服务，将原数据完整迁移到新根目录并检查权限。
+修改 `WALLPAPER_DATA_ROOT` 或 `STEAM_DATA_ROOT` 不会自动迁移已有数据。切换路径前应停止服务，完整复制并校验后保留旧副本，再修改配置和检查权限。
 
 ## 从源码构建部署
 
@@ -153,7 +154,7 @@ Worker 镜像内置固定版本的原生 ARM64 DepotDownloader 和 steamguard-cl
 
 ## DSH 接入
 
-如果 DSH 也使用 Docker Compose，为其增加只读挂载和环境变量，将示例中的数据根目录替换为实际 `WALLPAPER_DATA_ROOT`：
+如果 DSH 也使用 Docker Compose，为其增加只读挂载和环境变量，将示例中的 `/srv/wallpaper-manager/steam-data` 替换为实际 `STEAM_DATA_ROOT`；未设置时默认为 `${WALLPAPER_DATA_ROOT}/steam-data`：
 
 ```yaml
 services:
@@ -188,7 +189,7 @@ DSH_WE_STEAM_ROOT=/srv/wallpaper-manager/steam-data
 - 工坊搜索支持关键词、类型、内容分级和排序，支持输入页码跳转。
 - 默认开启内容过滤，只显示全年龄和 PG13，排除成人及未分级项目；可在“Steam 设置 → 搜索内容过滤”中关闭。
 - 搜索页会保存筛选、页码和滚动位置；搜索与壁纸库的筛选状态相互独立。
-- 已下载的 Scene/Web 可启动沙箱实时预览，视频可直接播放；预览区域支持全屏。
+- 已下载的 Scene/Web 可启动实时预览，支持鼠标移动与点击；视频可直接播放，预览区域支持全屏。预览使用同源非严格沙箱，仅适合自用可信环境。
 
 ### 下载与删除
 
@@ -200,15 +201,16 @@ DSH_WE_STEAM_ROOT=/srv/wallpaper-manager/steam-data
 
 ## 数据目录
 
-以下目录均位于 `deploy/.env` 配置的 `WALLPAPER_DATA_ROOT` 下：
+`WALLPAPER_DATA_ROOT` 包含数据库、暂存、登录配置和回收区；`STEAM_DATA_ROOT` 可独立位于另一块硬盘：
 
 ```text
-/srv/wallpaper-manager/
-├── app-data/       # SQLite 数据库
-├── staging/        # 下载暂存，校验前不会进入正式壁纸库
-├── steam-data/     # 网站 Worker 与 DSH 共享的原始壁纸文件
-├── steam-config/   # DepotDownloader 会话与 steamguard-cli maFiles，权限应为 0700
-└── trash/          # 删除时的原子移动区域
+/srv/wallpaper-manager/                 # WALLPAPER_DATA_ROOT
+├── app-data/                           # SQLite 数据库
+├── staging/                            # 下载暂存，校验前不会进入正式壁纸库
+├── steam-config/                       # DepotDownloader 会话与 maFiles，权限 0700
+└── trash/                              # 删除回收区
+
+/mnt/wallpaper-disk/.../steam-data/     # 可选 STEAM_DATA_ROOT，Worker 与 DSH 共享原始壁纸
 ```
 
 备份前建议暂停 API 和 Worker：
@@ -217,7 +219,7 @@ DSH_WE_STEAM_ROOT=/srv/wallpaper-manager/steam-data
 docker compose -f deploy/docker-compose.yml stop api worker
 ```
 
-随后备份 `app-data`、`steam-config` 和 `steam-data`，恢复时检查目录所有权，再执行 `up -d`。
+随后备份 `app-data`、`steam-config` 和实际 `STEAM_DATA_ROOT`，恢复时检查目录所有权，再执行 `up -d`。
 
 ## 本地开发
 
@@ -250,7 +252,7 @@ apps/
 packages/
   contracts/           共享 DTO、状态和错误契约
   database/            Prisma Schema、迁移和共享查询
-  wallpaper-files/     路径安全、入口解析、原子发布
+  wallpaper-files/     路径安全、入口解析、同盘原子发布与跨盘完整复制
   config/              环境变量校验
 deploy/                Dockerfile、Compose 和 Nginx 配置
 docs/                  部署、DSH 和 Steam 登录文档
@@ -270,6 +272,18 @@ tests/                 fixtures、集成测试和 E2E 测试
 ## 发布与变更记录
 
 版本变化记录在 [CHANGELOG.md](CHANGELOG.md)。发布新版本前，将 `Unreleased` 中的内容整理到新的版本号和日期下，同步更新 `package.json`，完成测试后再创建 Git 标签和 GitHub Release。镜像发布使用 GitHub Actions 中的手动 `build-images` 工作流。
+
+### 最近提交记录
+
+- **本次提交**：Scene 增加指针交互，Web 入口注入 WE API shim；预览改为兼容自用 Basic Auth 的同源非严格沙箱，并同步部署、DSH、规格和变更文档。
+- `f1f6aaa`：搜索结果渲染完成后再恢复滚动位置，避免布局变化导致位置偏移。
+- `597ae78`：修复 EXDEV 集成测试在 ESM 命名空间上无法 spy 的 CI 错误。
+- `f8bb801`：新增 `STEAM_DATA_ROOT` 拆盘挂载，支持跨文件系统发布与删除，并更新部署说明。
+- `b251a3f`：界面改为深色 iOS 风格磨玻璃与系统蓝配色。
+- `2718e87`：更新预览沙箱与工坊筛选测试，使其匹配新的实际行为。
+- `43a9611`：放开预览 iframe 的同源与指针锁能力，修复存储、认证资源和场景交互。
+- `fde92bf`：修复工坊类型与内容分级筛选，使用 Steam 实际支持的标签排除方式。
+- `bf73eaa`：补齐沙箱预览资源的 CORS 与跨源资源响应头，允许本地素材加载。
 
 ## 鸣谢
 

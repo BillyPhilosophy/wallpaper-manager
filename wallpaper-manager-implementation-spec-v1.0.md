@@ -110,43 +110,39 @@ Redis ◄──── Worker
 
 ---
 
-## 4. 文件系统契约（不可更改）
+## 4. 文件系统契约
 
 ### 4.1 宿主机目录
 
 ```text
-/srv/wallpaper-manager/
-├── staging/
-│   └── <jobId>/
-│       └── steamapps/
-│           └── workshop/
-│               └── content/
-│                   └── 431960/
-│                       └── <workshopId>/
-└── steam-data/
-    └── steamapps/
-        └── workshop/
-            └── content/
-                └── 431960/
-                    └── <workshopId>/
-                        ├── project.json
-                        ├── scene.pkg、scene.json 或网页入口
-                        ├── preview 文件
-                        └── 其他原始工坊资源
-```
+/srv/wallpaper-manager/               # WALLPAPER_DATA_ROOT
+├── app-data/                         # SQLite、应用配置
+├── steam-config/                     # DepotDownloader 会话与受保护的 maFiles
+├── trash/                            # 删除回收区
+└── staging/
+    └── <jobId>/
+        └── steamapps/
+            └── workshop/
+                └── content/
+                    └── 431960/
+                        └── <workshopId>/
 
-另设独立持久化目录：
-
-```text
-/srv/wallpaper-manager/app-data/     # SQLite、应用配置
-/srv/wallpaper-manager/steam-config/ # DepotDownloader 会话与受保护的 steamguard-cli maFiles
-/srv/wallpaper-manager/trash/        # 删除时的原子移入区域
+${STEAM_DATA_ROOT}/                   # 默认 ${WALLPAPER_DATA_ROOT}/steam-data，可独立挂盘
+└── steamapps/
+    └── workshop/
+        └── content/
+            └── 431960/
+                └── <workshopId>/
+                    ├── project.json
+                    ├── scene.pkg、scene.json 或网页入口
+                    ├── preview 文件
+                    └── 其他原始工坊资源
 ```
 
 权限要求：
 
-- `staging`、`steam-data`、`trash` 必须位于同一文件系统。
-- Worker 对以上目录有写权限。
+- `staging`、`trash` 与 `app-data` 位于 `WALLPAPER_DATA_ROOT`；`steam-data` 可通过 `STEAM_DATA_ROOT` 独立挂载。
+- Worker 对以上目录有写权限，跨盘发布与删除使用 `EXDEV` 复制降级路径。
 - API 对 `steam-data` 只需要读权限。
 - DSH 不挂载 `staging`、`app-data` 或 `steam-config`。
 - 部署文档必须说明 UID／GID，禁止产生普通用户和 DSH 无法读取的 root-only 文件。
@@ -539,6 +535,8 @@ GET /api/wallpapers/:workshopId/resources/*
 - 拒绝读取 Workshop 根之外的文件。
 - 支持常见媒体 Range 请求和正确 MIME。
 - 提供 WebWallGL 所需的同源或显式 CORS 响应。
+- Web 入口 HTML 注入与固定引擎版本一致的 WE API shim 和站点根，保证属性及脚本交互可用。
+- 自用部署采用同源非严格沙箱，不再向 HTML 响应附加强制 `sandbox` CSP；这意味着壁纸脚本可访问本站 API 和存储，仅允许在可信局域网单用户场景使用。
 - 不把 `STEAM_ROOT` 的物理路径泄露到浏览器。
 
 ---
@@ -557,7 +555,7 @@ GET /api/wallpapers/:workshopId/resources/*
   → 识别壁纸类型和支持能力
   → 计算大小并生成索引
   → 确认目标目录不存在或处于可恢复状态
-  → 原子重命名到正式 Workshop 根
+  → 同盘原子重命名，跨盘复制到正式 Workshop 根
   → 数据库标记 downloaded/succeeded
   → 清理 staging
 ```
@@ -576,7 +574,7 @@ GET /api/wallpapers/:workshopId/resources/*
 
 - 任何失败都先记录脱敏错误，再清理或隔离当前 `jobId` 的 staging。
 - Worker 重启后，活跃任务必须恢复为可重试状态，不能永久停留在 `downloading`。
-- 发布采用原子 rename；不得直接向正式目录流式写入。
+- 同盘发布采用原子 rename；跨盘遇到 `EXDEV` 时复制完整目录后再删除源，不得直接向正式目录流式写入。跨盘复制不再是原子操作，失败可能留下需要清理的部分目标目录。
 - 同一 DepotDownloader 会话默认串行使用。
 - 捕获并分类：登录失效、Guard 要求、限流、网络错误、磁盘不足、下载超时、内容不支持、校验失败。
 
@@ -620,7 +618,9 @@ API Key 若仅支持环境变量，界面只显示“已配置／未配置”，
 - 已下载其他类型：显示官方预览或不支持说明。
 - WebWallGL 初始化失败：自动回退到官方预览并显示降级原因。
 - 切换路由、壁纸或卸载组件时必须调用 `release()`，释放 WebGL、音频和事件监听。
-- Web 壁纸使用独立沙箱容器，不得获得管理网站 DOM、存储或 API 的任意访问权。
+- Scene 通过 `pushPointer()` 注入归一化鼠标移动与左键状态，快速点击的按下态至少保持一帧；离开预览或窗口失焦时调用 `pointerLeave()`。
+- Web 入口由 API 注入与固定引擎版本一致的 WE API shim，支持作者脚本、属性和交互。
+- 自用部署允许 Scene／Web 使用同源非严格沙箱，壁纸脚本可访问管理网站 DOM、存储和 API；不得用于开放注册或不受信用户场景。
 
 ### 10.3 WebWallGL 适配器
 
@@ -641,11 +641,11 @@ interface LivePreviewAdapter {
 
 实现要求：
 
-- 使用 WebWallGL 公开 API，不复制 DSH 插件内部适配层。
+- 挂载与指针输入使用 WebWallGL 公开 API；WE shim 从同版本引擎包提取并由 API 注入，不复制 DSH 插件内部适配层。
 - 资源通过本站 `resourceBaseUrl` 加载。
-- 组件卸载幂等，重复 `unmount()` 不抛错。
+- 组件卸载幂等，重复 `unmount()` 不抛错，并注销指针监听、动画帧和延时释放。
 - 页面不可见时暂停或降低资源消耗。
-- 版本升级必须与目标 DSH 插件锁文件重新对齐，不允许前端单独升级。
+- 版本升级必须与目标 DSH 插件锁文件重新对齐，不允许前端或 API 单独升级。
 
 ---
 

@@ -6,8 +6,9 @@ import type { Request, Response } from 'express';
 import { ACTIVE_DOWNLOAD_STATUSES, CONTENT_RATINGS, WALLPAPER_STATUSES, WALLPAPER_TYPES, type DownloadProgress } from '@wallpaper-manager/contracts';
 import { assertWorkshopId, previewDescriptor, resolveResourcePath, safeJobId, wallpaperDirectory } from '@wallpaper-manager/wallpaper-files';
 import { filterValues, Infrastructure, serializeJob, serializeWallpaper } from '../common';
+import { injectWebShim, readWebShim } from './web-shim';
 
-const mime: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.mp4': 'video/mp4', '.webm': 'video/webm', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.pkg': 'application/octet-stream', '.tex': 'application/octet-stream', '.wasm': 'application/wasm' };
+const mime: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.htm': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.mp4': 'video/mp4', '.webm': 'video/webm', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.pkg': 'application/octet-stream', '.tex': 'application/octet-stream', '.wasm': 'application/wasm' };
 
 async function workerDownloadProgress(): Promise<Map<string, DownloadProgress>> {
   try {
@@ -152,12 +153,17 @@ export class WallpapersController {
   @Get('wallpapers/:workshopId/resources/{*resourcePath}')
   @Header('Access-Control-Allow-Origin', '*')
   @Header('X-Content-Type-Options', 'nosniff')
-  @Header('Content-Security-Policy', 'sandbox allow-scripts')
   async resource(@Param('workshopId') id: string, @Req() request: Request, @Res() response: Response) {
     const raw = request.params.resourcePath; const relative = Array.isArray(raw) ? raw.join('/') : raw;
     const file = await resolveResourcePath(process.env.STEAM_ROOT || './steam-data', id, relative);
     const stat = await fs.stat(file); const type = mime[path.extname(file).toLowerCase()] || 'application/octet-stream';
     response.setHeader('Content-Type', type); response.setHeader('Accept-Ranges', 'bytes'); response.setHeader('Cache-Control', 'private, max-age=60');
+    if (type.startsWith('text/html')) {
+      const html = injectWebShim(await fs.readFile(file, 'utf8'), await readWebShim(), `/api/wallpapers/${id}/resources/`);
+      response.status(200).setHeader('Cache-Control', 'no-store').setHeader('Content-Length', Buffer.byteLength(html));
+      if (request.method === 'HEAD') response.end(); else response.send(html);
+      return;
+    }
     const range = request.headers.range; let start = 0; let end = stat.size - 1; let status = 200;
     if (range) {
       const match = /^bytes=(\d*)-(\d*)$/.exec(range); if (!match) { response.status(416).setHeader('Content-Range', `bytes */${stat.size}`).end(); return; }
