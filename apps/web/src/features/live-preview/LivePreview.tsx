@@ -23,5 +23,5 @@ export function LivePreview({ descriptor }: { descriptor: PreviewDescriptor }) {
     const source = `${descriptor.resourceBaseUrl.replace(/\/$/, '')}/${descriptor.entry.split('/').map(encodeURIComponent).join('/')}`;
     return <video className="preview local-video" src={source} controls playsInline preload="none" aria-label="本地视频实时预览" onError={() => setError('本地视频加载失败')}/>;
   }
-  return <iframe ref={frame} className="live-preview live-preview-frame" src="/preview.html" sandbox="allow-scripts" aria-label="WebWallGL 实时预览" onLoad={postDescriptor}/>;
+  return <iframe ref={frame} className="live-preview live-preview-frame" src="/preview.html" sandbox="allow-scripts allow-same-origin allow-pointer-lock" aria-label="WebWallGL 实时预览" onLoad={postDescriptor}/>;
 }
