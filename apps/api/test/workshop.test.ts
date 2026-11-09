@@ -59,8 +59,9 @@ describe('Steam subscription synchronization', () => {
     expect(params.get('match_all_tags')).toBe('false');
     expect(params.get('requiredtags[0]')).toBe('Scene');
     expect(params.get('requiredtags[1]')).toBe('Video');
-    expect(params.get('taggroups[0][tags][0]')).toBe('Everyone');
-    expect(params.get('taggroups[0][tags][1]')).toBe('PG13');
+    // 分级走排除法：选了 everyone+pg13(Everyone+Questionable)，排除未选的 Mature；taggroups 已弃用
+    expect(params.get('excludedtags[0]')).toBe('Mature');
+    expect(params.has('taggroups[0][tags][0]')).toBe(false);
     expect(result.total).toBe(1);
     expect(result.cursor).toBeNull();
   });

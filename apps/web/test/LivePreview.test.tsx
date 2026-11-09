@@ -1,14 +1,15 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest';
-import { fireEvent, render } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render } from '@testing-library/react';
 import type { PreviewDescriptor } from '@wallpaper-manager/contracts';
 import { LivePreview } from '../src/features/live-preview/LivePreview';
 const descriptor: PreviewDescriptor = { workshopId: '1', mode: 'webwallgl', type: 'scene', entry: 'scene.pkg', resourceBaseUrl: '/api/wallpapers/1/resources', fallbackPreviewUrl: null, degraded: false, message: null };
 describe('LivePreview', () => {
-  it('isolates engine scripts in an opaque-origin sandboxed iframe', () => {
+  afterEach(() => cleanup());
+  it('grants the sandbox flags WebWallGL needs to render and interact', () => {
     const view = render(<LivePreview descriptor={descriptor}/>);
     const frame = view.getByLabelText('WebWallGL 实时预览') as HTMLIFrameElement;
-    expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
+    expect(frame.getAttribute('sandbox')).toBe('allow-scripts allow-same-origin allow-pointer-lock');
     expect(frame.getAttribute('src')).toBe('/preview.html');
     fireEvent.load(frame);
     view.unmount();
