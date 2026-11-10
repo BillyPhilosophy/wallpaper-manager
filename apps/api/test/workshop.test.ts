@@ -50,7 +50,7 @@ describe('Steam subscription synchronization', () => {
     vi.stubEnv('STEAM_WEB_API_KEY', 'test-key');
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ response: { total: 1, publishedfiledetails: [{ publishedfileid: '123', title: 'Filtered scene', tags: [{ tag: 'Scene' }, { tag: 'Everyone' }] }] } })));
     vi.stubGlobal('fetch', fetchMock);
-    const db = { wallpaper: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn().mockResolvedValue({ count: 0 }) } };
+    const db = { wallpaper: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn().mockResolvedValue({ count: 0 }) }, favorite: { findMany: vi.fn().mockResolvedValue([]) } };
     const result = await new WorkshopController({ db } as any).search('forest', '2', '20', 'scene,video', 'everyone,pg13', 'subscriptions');
     const params = new URL(String(fetchMock.mock.calls[0][0])).searchParams;
     expect(params.get('page')).toBe('2');
@@ -73,5 +73,31 @@ describe('Steam subscription synchronization', () => {
     const controller = new WorkshopController({ db: {} } as any);
     await expect(controller.search('', '*', '20', 'unknown', '')).rejects.toMatchObject({ status: 400 });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('returns detail read-only without writing the wallpaper table', async () => {
+    vi.stubEnv('STEAM_WEB_API_KEY', 'test-key');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ response: { publishedfiledetails: [{ result: 1, publishedfileid: '123', title: 'Browsed scene', tags: [{ tag: 'Scene' }, { tag: 'Everyone' }] }] } }))));
+    const db = {
+      wallpaper: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn(), update: vi.fn(), create: vi.fn() },
+      favorite: { findUnique: vi.fn().mockResolvedValue(null) },
+    };
+    const result = await new WorkshopController({ db } as any).detail('123');
+    expect(db.wallpaper.upsert).not.toHaveBeenCalled();
+    expect(db.wallpaper.update).not.toHaveBeenCalled();
+    expect(db.wallpaper.create).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ workshopId: '123', localStatus: 'not_downloaded', favorited: false });
+  });
+
+  it('marks detail favorited when a favorite row exists', async () => {
+    vi.stubEnv('STEAM_WEB_API_KEY', 'test-key');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ response: { publishedfiledetails: [{ result: 1, publishedfileid: '456', title: 'Scene', tags: [{ tag: 'Scene' }] }] } }))));
+    const db = {
+      wallpaper: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn() },
+      favorite: { findUnique: vi.fn().mockResolvedValue({ workshopId: '456' }) },
+    };
+    const result = await new WorkshopController({ db } as any).detail('456');
+    expect(db.wallpaper.upsert).not.toHaveBeenCalled();
+    expect(result.favorited).toBe(true);
   });
 });

@@ -4,6 +4,7 @@ import { api, post } from '../api';
 import { useRemote } from '../hooks';
 import { MultiSelectFilter } from '../components/MultiSelectFilter';
 import { WallpaperCard } from '../components/WallpaperCard';
+import { FavoriteButton } from '../components/FavoriteButton';
 import { ratingOptions, typeOptions } from '../features/library/session';
 
 type SyncState = { status: 'idle' | 'running' | 'succeeded' | 'failed'; total: number; synced: number; message: string | null; updatedAt: string };
@@ -62,7 +63,7 @@ export function SubscriptionsPage() {
     <div className="filters"><input placeholder="筛选订阅标题或 ID" aria-label="筛选订阅标题或 ID" value={q} onChange={(event) => { setQ(event.target.value); setPage(1); }}/><MultiSelectFilter label="类型" options={typeOptions} selected={types} onChange={changeTypes}/><MultiSelectFilter label="内容分级" options={ratingOptions} selected={ratings} onChange={changeRatings}/></div>
     {list.error && <div className="error-state">{list.error}<button className="text-button" onClick={list.reload}>重试</button></div>}
     {list.loading && list.data && <div className="inline-loading" role="status">正在更新订阅列表…</div>}
-    {list.loading && !list.data ? <div className="loading" role="status">正在读取订阅列表…</div> : <div className={`wallpaper-grid${list.loading ? ' is-loading' : ''}`}>{list.data?.items.map((wallpaper) => <WallpaperCard key={wallpaper.workshopId} item={{ ...wallpaper, metadataJson: wallpaper.metadataJson as Record<string, unknown>, localStatus: wallpaper.status, previewContentType: null }} action={wallpaper.status === 'not_downloaded' ? <button disabled={busyId === wallpaper.workshopId} onClick={() => void download(wallpaper.workshopId)}>{busyId === wallpaper.workshopId ? '正在入队' : '下载'}</button> : null}/>)}</div>}
+    {list.loading && !list.data ? <div className="loading" role="status">正在读取订阅列表…</div> : <div className={`wallpaper-grid${list.loading ? ' is-loading' : ''}`}>{list.data?.items.map((wallpaper) => { const item = { ...wallpaper, metadataJson: wallpaper.metadataJson as Record<string, unknown>, localStatus: wallpaper.status, previewContentType: null }; return <WallpaperCard key={wallpaper.workshopId} item={item} action={<><FavoriteButton item={item} onChange={list.reload}/>{wallpaper.status === 'not_downloaded' ? <button disabled={busyId === wallpaper.workshopId} onClick={() => void download(wallpaper.workshopId)}>{busyId === wallpaper.workshopId ? '正在入队' : '下载'}</button> : null}</>}/>; })}</div>}
     {!list.loading && !list.error && list.data && !list.data.items.length && <div className="empty-state">暂无订阅项目，请先同步。</div>}
     <div className="pagination"><button className="secondary" disabled={list.loading || page <= 1} onClick={() => goToPage(page - 1)}>上一页</button><form className="page-jump" onSubmit={(event) => { event.preventDefault(); goToPage(Number(pageInput)); }}><input aria-label="页码" type="number" min="1" max={maxPage} step="1" value={pageInput} disabled={list.loading} onChange={(event) => setPageInput(event.target.value)}/><button className="secondary" disabled={list.loading}>跳转</button></form><span>共 {maxPage} 页 · {list.data?.total || 0} 项</span><button className="secondary" disabled={list.loading || page >= maxPage} onClick={() => goToPage(page + 1)}>下一页</button></div>
   </section>;

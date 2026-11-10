@@ -4,6 +4,7 @@ import type { PreviewDescriptor, Wallpaper, WorkshopItem } from '@wallpaper-mana
 import { api, post, statusLabel, typeLabel } from '../api';
 import { useRemote } from '../hooks';
 import { OfficialPreview } from '../components/OfficialPreview';
+import { FavoriteButton } from '../components/FavoriteButton';
 import { LivePreview } from '../features/live-preview/LivePreview';
 export function DetailPage() {
   const { workshopId = '' } = useParams(); const [live, setLive] = useState(false);
@@ -24,6 +25,7 @@ export function DetailPage() {
   if (remote.error && !wallpaper) return <div className="error-state">{remote.error}</div>;
   if (!item && !wallpaper) return <div className="loading">正在读取工坊详情…</div>;
   const downloaded = wallpaper?.status === 'downloaded'; const title = wallpaper?.title || item?.title || workshopId;
+  const favoriteItem = { workshopId, title, officialPreviewUrl: wallpaper?.officialPreviewUrl ?? item?.officialPreviewUrl ?? null, type: wallpaper?.type || item?.type || 'unknown', contentRating: wallpaper?.contentRating || item?.contentRating || 'unrated', favorited: item?.favorited ?? wallpaper?.favorited ?? false };
   const expanded = fullscreen || immersive;
   const toggleFullscreen = async () => {
     if (document.fullscreenElement) { await document.exitFullscreen(); return; }
@@ -48,7 +50,7 @@ export function DetailPage() {
         {live && descriptor.data && downloaded ? <LivePreview descriptor={descriptor.data}/> : <OfficialPreview url={wallpaper?.officialPreviewUrl || item?.officialPreviewUrl || null} title={title}/>}
         {live && downloaded && <button type="button" className="preview-fullscreen" aria-pressed={expanded} onClick={() => void toggleFullscreen()}>{expanded ? '退出全屏' : '全屏预览'}</button>}
       </div>
-      <div className="detail-copy"><p className="eyebrow">WORKSHOP {workshopId}</p><h1>{title}</h1><div className="badges"><span>{typeLabel[wallpaper?.type || item?.type || 'unknown']}</span><span>{statusLabel[wallpaper?.status || item?.localStatus || 'not_downloaded']}</span></div><p className="description">{wallpaper?.description || item?.description || '暂无描述'}</p>{downloaded ? <button onClick={toggleLive}>{live ? '查看官方预览' : '启动实时预览'}</button> : <button onClick={() => void download()}>下载到壁纸库</button>}{wallpaper?.fileSizeBytes && <p className="muted">本地大小 {(Number(wallpaper.fileSizeBytes) / 1024 / 1024).toFixed(1)} MB</p>}<details><summary>完整官方元数据</summary><pre>{JSON.stringify(wallpaper?.metadataJson || item?.metadataJson, null, 2)}</pre></details></div>
+      <div className="detail-copy"><p className="eyebrow">WORKSHOP {workshopId}</p><h1>{title}</h1><div className="badges"><span>{typeLabel[wallpaper?.type || item?.type || 'unknown']}</span><span>{statusLabel[wallpaper?.status || item?.localStatus || 'not_downloaded']}</span></div><p className="description">{wallpaper?.description || item?.description || '暂无描述'}</p><div className="detail-actions">{downloaded ? <button onClick={toggleLive}>{live ? '查看官方预览' : '启动实时预览'}</button> : <button onClick={() => void download()}>下载到壁纸库</button>}<FavoriteButton item={favoriteItem} onChange={() => { remote.reload(); local.reload(); }}/></div>{wallpaper?.fileSizeBytes && <p className="muted">本地大小 {(Number(wallpaper.fileSizeBytes) / 1024 / 1024).toFixed(1)} MB</p>}<details><summary>完整官方元数据</summary><pre>{JSON.stringify(wallpaper?.metadataJson || item?.metadataJson, null, 2)}</pre></details></div>
     </div>
   </section>;
 }

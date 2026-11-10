@@ -54,3 +54,14 @@ model SteamAuthState {
   steamId     String?
   updatedAt   DateTime @updatedAt
 }
+
+model Favorite {
+  workshopId         String   @id
+  title              String
+  officialPreviewUrl String?
+  type               String   @default("unknown")
+  contentRating      String   @default("unrated")
+  createdAt          DateTime @default(now())
+
+  @@index([createdAt])
+}

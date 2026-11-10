@@ -14,10 +14,14 @@ export type ErrorCode = 'STEAM_AUTH_REQUIRED' | 'STEAM_GUARD_REQUIRED' | 'STEAM_
 export interface ApiError { code: ErrorCode | string; message: string; requestId: string }
 export interface Wallpaper {
   workshopId: string; title: string; description: string | null; type: WallpaperType;
-  contentRating: ContentRating; subscribed: boolean;
+  contentRating: ContentRating; subscribed: boolean; favorited: boolean;
   officialPreviewUrl: string | null; metadataJson: unknown; localRelativePath: string | null;
   status: WallpaperStatus; fileSizeBytes: string | null; lastErrorCode: string | null;
   lastErrorMessage: string | null; downloadedAt: string | null; createdAt: string; updatedAt: string;
+}
+export interface Favorite {
+  workshopId: string; title: string; officialPreviewUrl: string | null;
+  type: WallpaperType; contentRating: ContentRating; createdAt: string;
 }
 export interface DownloadProgress {
   downloadedBytes: string; totalBytes: string; networkBytes: string;
@@ -31,7 +35,7 @@ export interface DownloadJob {
 }
 export interface WorkshopItem {
   workshopId: string; title: string; description: string | null; type: WallpaperType;
-  contentRating: ContentRating; subscribed: boolean;
+  contentRating: ContentRating; subscribed: boolean; favorited: boolean;
   officialPreviewUrl: string | null; previewContentType: string | null;
   metadataJson: Record<string, unknown>; localStatus: WallpaperStatus;
 }

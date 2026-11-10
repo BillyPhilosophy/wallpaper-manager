@@ -32,10 +32,12 @@ export class WallpapersController {
     if (subscribed && !['true', 'false'].includes(subscribed)) throw new BadRequestException('无效订阅状态');
     const where = { ...(q ? { OR: [{ title: { contains: q.slice(0, 100) } }, { workshopId: { contains: q.slice(0, 100) } }] } : {}), ...(type ? { type: { in: types } } : {}), ...(rating ? { contentRating: { in: ratings } } : {}), ...(status ? { status } : {}), ...(subscribed ? { subscribed: subscribed === 'true' } : {}) };
     const [items, total] = await Promise.all([this.infra.db.wallpaper.findMany({ where, orderBy: { updatedAt: 'desc' }, skip: (page - 1) * pageSize, take: pageSize }), this.infra.db.wallpaper.count({ where })]);
-    return { items: items.map(serializeWallpaper), page, pageSize, total };
+    const favs = items.length ? await this.infra.db.favorite.findMany({ where: { workshopId: { in: items.map((i) => i.workshopId) } }, select: { workshopId: true } }) : [];
+    const favSet = new Set(favs.map((f) => f.workshopId));
+    return { items: items.map((i) => ({ ...serializeWallpaper(i), favorited: favSet.has(i.workshopId) })), page, pageSize, total };
   }
   @Get('wallpapers/:workshopId')
-  async get(@Param('workshopId') id: string) { return serializeWallpaper(await this.find(id)); }
+  async get(@Param('workshopId') id: string) { const wallpaper = await this.find(id); const favorited = !!(await this.infra.db.favorite.findUnique({ where: { workshopId: id } })); return { ...serializeWallpaper(wallpaper), favorited }; }
   @Post('wallpapers/:workshopId/download')
   async download(@Param('workshopId') id: string) {
     assertWorkshopId(id);

@@ -4,6 +4,7 @@ import { api, post } from '../api';
 import { useRemote } from '../hooks';
 import { MultiSelectFilter } from '../components/MultiSelectFilter';
 import { WallpaperCard } from '../components/WallpaperCard';
+import { FavoriteButton } from '../components/FavoriteButton';
 import { cachedSearch, invalidateSearch, ratingOptions, saveSearchSession, searchKey, searchSession, sortOptions, typeOptions, type SearchRating, type SearchSort, type SearchType } from '../features/search/session';
 import { contentFilterEnabled } from '../features/content-filter';
 
@@ -88,7 +89,7 @@ export function SearchPage() {
     {contentFilter && <p className="filter-notice">内容过滤已开启：不显示成人和未分级内容，可在 Steam 设置中关闭。</p>}
     {error && <div className="error-state">{error}<button className="text-button" onClick={refresh}>重试</button></div>}
     {loading && data && <div className="inline-loading" role="status">正在更新搜索结果…</div>}
-    {loading && !data ? <div className="loading" role="status">正在连接 Steam 创意工坊…</div> : <div className={`wallpaper-grid${loading ? ' is-loading' : ''}`}>{data?.items.map((item) => <WallpaperCard key={item.workshopId} item={item} action={item.localStatus === 'not_downloaded' ? <button disabled={busy === item.workshopId} onClick={() => void download(item.workshopId)}>{busy === item.workshopId ? '正在入队' : '下载'}</button> : null}/>)}</div>}
+    {loading && !data ? <div className="loading" role="status">正在连接 Steam 创意工坊…</div> : <div className={`wallpaper-grid${loading ? ' is-loading' : ''}`}>{data?.items.map((item) => <WallpaperCard key={item.workshopId} item={item} action={<><FavoriteButton item={item} onChange={refresh}/>{item.localStatus === 'not_downloaded' ? <button disabled={busy === item.workshopId} onClick={() => void download(item.workshopId)}>{busy === item.workshopId ? '正在入队' : '下载'}</button> : null}</>}/>)}</div>}
     {!loading && data && !data.items.length && <div className="empty-state">没有找到匹配的壁纸。</div>}
     <div className="pagination">
       <button className="secondary" disabled={loading || !data || page <= 1} onClick={() => goToPage(page - 1)}>上一页</button>

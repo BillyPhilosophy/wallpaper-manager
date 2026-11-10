@@ -19,8 +19,8 @@ function inferRating(detail: any): ContentRating {
   const match = tags.find((tag: string) => ['g', 'everyone', 'pg13', 'questionable', 'r', 'mature'].includes(tag.toLowerCase()));
   return contentRating(match);
 }
-function item(detail: any, local?: { status: string; type: string; contentRating: string; subscribed: boolean }): WorkshopItem {
-  return { workshopId: String(detail.publishedfileid), title: detail.title || `工坊壁纸 ${detail.publishedfileid}`, description: detail.description || detail.short_description || null, type: (local?.status === 'downloaded' ? local.type : inferType(detail)) as WallpaperType, contentRating: (local?.status === 'downloaded' ? local.contentRating : inferRating(detail)) as ContentRating, subscribed: local?.subscribed || false, officialPreviewUrl: detail.preview_url || null, previewContentType: detail.preview_url ? (/\.mp4(\?|$)/.test(detail.preview_url) ? 'video/mp4' : null) : null, metadataJson: detail, localStatus: (local?.status || 'not_downloaded') as WorkshopItem['localStatus'] };
+function item(detail: any, local?: { status: string; type: string; contentRating: string; subscribed: boolean; favorited?: boolean }): WorkshopItem {
+  return { workshopId: String(detail.publishedfileid), title: detail.title || `工坊壁纸 ${detail.publishedfileid}`, description: detail.description || detail.short_description || null, type: (local?.status === 'downloaded' ? local.type : inferType(detail)) as WallpaperType, contentRating: (local?.status === 'downloaded' ? local.contentRating : inferRating(detail)) as ContentRating, subscribed: local?.subscribed || false, favorited: local?.favorited || false, officialPreviewUrl: detail.preview_url || null, previewContentType: detail.preview_url ? (/\.mp4(\?|$)/.test(detail.preview_url) ? 'video/mp4' : null) : null, metadataJson: detail, localStatus: (local?.status || 'not_downloaded') as WorkshopItem['localStatus'] };
 }
 async function cached<T>(key: string, load: () => Promise<T>): Promise<T> {
   const hit = cache.get(key); if (hit && hit.expires > Date.now()) return hit.value as T;
@@ -61,7 +61,8 @@ export class WorkshopController {
     const body = await cached(`search:${params}`, () => steamFetch(this.infra.steamNetwork, `https://api.steampowered.com/IPublishedFileService/QueryFiles/v1/?${params}`));
     const details = body.response?.publishedfiledetails || []; const ids = details.map((entry: any) => String(entry.publishedfileid));
     const local = await this.infra.db.wallpaper.findMany({ where: { workshopId: { in: ids } } }); const states = new Map(local.map((entry) => [entry.workshopId, entry]));
-    const items = details.map((entry: any) => item(entry, states.get(String(entry.publishedfileid))));
+    const favs = await this.infra.db.favorite.findMany({ where: { workshopId: { in: ids } }, select: { workshopId: true } }); const favSet = new Set(favs.map((f) => f.workshopId));
+    const items = details.map((entry: any) => { const workshopId = String(entry.publishedfileid); const state = states.get(workshopId); return item(entry, state ? { ...state, favorited: favSet.has(workshopId) } : (favSet.has(workshopId) ? { status: 'not_downloaded', type: 'unknown', contentRating: 'unrated', subscribed: false, favorited: true } : undefined)); });
     await Promise.all(items.map((entry: WorkshopItem) => this.infra.db.wallpaper.updateMany({ where: { workshopId: entry.workshopId }, data: { title: entry.title, description: entry.description, officialPreviewUrl: entry.officialPreviewUrl, metadataJson: JSON.stringify(entry.metadataJson) } })));
     return { items, cursor: null, total: Number(body.response?.total || items.length) };
   }
@@ -72,9 +73,8 @@ export class WorkshopController {
     const detail = body.response?.publishedfiledetails?.[0];
     if (!detail || detail.result !== 1 && !detail.publishedfileid) throw new ServiceUnavailableException({ code: 'WORKSHOP_ITEM_NOT_FOUND', message: '未找到工坊项目' });
     const local = await this.infra.db.wallpaper.findUnique({ where: { workshopId: id } });
-    const result = item(detail, local || undefined);
-    await this.infra.db.wallpaper.upsert({ where: { workshopId: id }, update: { title: result.title, description: result.description, type: result.type, contentRating: result.contentRating, officialPreviewUrl: result.officialPreviewUrl, metadataJson: JSON.stringify(result.metadataJson) }, create: { workshopId: id, title: result.title, description: result.description, type: result.type, contentRating: result.contentRating, officialPreviewUrl: result.officialPreviewUrl, metadataJson: JSON.stringify(result.metadataJson) } });
-    return result;
+    const favorited = !!(await this.infra.db.favorite.findUnique({ where: { workshopId: id } }));
+    return item(detail, local ? { ...local, favorited } : { status: 'not_downloaded', type: 'unknown', contentRating: 'unrated', subscribed: false, favorited });
   }
   @Get('subscriptions/sync')
   syncStatus() { return subscriptionSync; }

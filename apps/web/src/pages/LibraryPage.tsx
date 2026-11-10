@@ -1,26 +1,26 @@
 import { useEffect, useState } from 'react';
 import { type ContentRating, type Page, type Wallpaper, type WallpaperType } from '@wallpaper-manager/contracts';
-import { api, statusLabel } from '../api';
+import { api } from '../api';
 import { useRemote } from '../hooks';
 import { MultiSelectFilter } from '../components/MultiSelectFilter';
 import { WallpaperCard } from '../components/WallpaperCard';
+import { FavoriteButton } from '../components/FavoriteButton';
 import { librarySession, ratingOptions, saveLibrarySession, typeOptions } from '../features/library/session';
 
 export function LibraryPage() {
   const [q, setQ] = useState(librarySession.q);
   const [types, setTypes] = useState<WallpaperType[]>(librarySession.types);
   const [ratings, setRatings] = useState<ContentRating[]>(librarySession.ratings);
-  const [status, setStatus] = useState(librarySession.status);
   const [page, setPage] = useState(librarySession.page);
   const [pageInput, setPageInput] = useState(String(page));
   const [pageError, setPageError] = useState('');
   const { data, error, loading, reload } = useRemote<Page<Wallpaper>>(() => {
     if (!types.length || !ratings.length) return Promise.resolve({ items: [], page, pageSize: 24, total: 0 });
-    const params = new URLSearchParams({ q, status, page: String(page), pageSize: '24' });
+    const params = new URLSearchParams({ q, status: 'downloaded', page: String(page), pageSize: '24' });
     if (types.length < typeOptions.length) params.set('type', types.join(','));
     if (ratings.length < ratingOptions.length) params.set('rating', ratings.join(','));
     return api(`/wallpapers?${params}`);
-  }, [q, types, ratings, status, page]);
+  }, [q, types, ratings, page]);
   const maxPage = Math.max(1, Math.ceil((data?.total || 0) / (data?.pageSize || 24)));
   useEffect(() => { setPageInput(String(page)); }, [page]);
   useEffect(() => { if (data && page > maxPage) goToPage(maxPage); }, [data, page, maxPage]);
@@ -28,7 +28,6 @@ export function LibraryPage() {
   const changeQ = (value: string) => { librarySession.q = value; resetPage(); saveLibrarySession(); setQ(value); };
   const changeTypes = (values: WallpaperType[]) => { librarySession.types = values; resetPage(); saveLibrarySession(); setTypes(values); };
   const changeRatings = (values: ContentRating[]) => { librarySession.ratings = values; resetPage(); saveLibrarySession(); setRatings(values); };
-  const changeStatus = (value: string) => { librarySession.status = value; resetPage(); saveLibrarySession(); setStatus(value); };
   const goToPage = (next: number) => {
     if (!Number.isSafeInteger(next) || next < 1 || next > maxPage) { setPageError(`请输入 1 到 ${maxPage} 之间的页码`); return; }
     setPageError('');
@@ -39,10 +38,10 @@ export function LibraryPage() {
   const remove = async (id: string) => { if (!confirm('确定从网站与 DSH 共享目录删除这张壁纸？')) return; await api(`/wallpapers/${id}`, { method: 'DELETE' }); reload(); };
   return <section aria-busy={loading}>
     <div className="page-heading"><div><p className="eyebrow">YOUR COLLECTION</p><h1>我的壁纸</h1><p>管理已与 DSH 共享的本地原始工坊文件。</p></div></div>
-    <div className="filters"><input placeholder="筛选标题或 ID" aria-label="筛选标题或 ID" value={q} onChange={(event) => changeQ(event.target.value)}/><MultiSelectFilter label="类型" options={typeOptions} selected={types} onChange={changeTypes}/><MultiSelectFilter label="内容分级" options={ratingOptions} selected={ratings} onChange={changeRatings}/><select aria-label="下载状态" value={status} onChange={(event) => changeStatus(event.target.value)}><option value="">全部状态</option>{Object.entries(statusLabel).slice(0, 7).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></div>
+    <div className="filters"><input placeholder="筛选标题或 ID" aria-label="筛选标题或 ID" value={q} onChange={(event) => changeQ(event.target.value)}/><MultiSelectFilter label="类型" options={typeOptions} selected={types} onChange={changeTypes}/><MultiSelectFilter label="内容分级" options={ratingOptions} selected={ratings} onChange={changeRatings}/></div>
     {error && <div className="error-state">{error}<button className="text-button" onClick={reload}>重试</button></div>}
     {loading && data && <div className="inline-loading" role="status">正在更新壁纸库…</div>}
-    {loading && !data ? <div className="loading" role="status">正在读取壁纸库…</div> : <div className={`wallpaper-grid${loading ? ' is-loading' : ''}`}>{data?.items.map((wallpaper) => <WallpaperCard key={wallpaper.workshopId} item={{ ...wallpaper, metadataJson: wallpaper.metadataJson as Record<string, unknown>, localStatus: wallpaper.status, previewContentType: null }} action={wallpaper.status === 'downloaded' ? <button className="danger" onClick={() => void remove(wallpaper.workshopId)}>删除</button> : null}/>)}</div>}
+    {loading && !data ? <div className="loading" role="status">正在读取壁纸库…</div> : <div className={`wallpaper-grid${loading ? ' is-loading' : ''}`}>{data?.items.map((wallpaper) => { const item = { ...wallpaper, metadataJson: wallpaper.metadataJson as Record<string, unknown>, localStatus: wallpaper.status, previewContentType: null }; return <WallpaperCard key={wallpaper.workshopId} item={item} action={<><FavoriteButton item={item} onChange={reload}/>{wallpaper.status === 'downloaded' ? <button className="danger" onClick={() => void remove(wallpaper.workshopId)}>删除</button> : null}</>}/>; })}</div>}
     {!loading && !error && data && !data.items.length ? <div className="empty-state">还没有匹配的壁纸。</div> : null}
     <div className="pagination">
       <button className="secondary" disabled={loading || !data || page <= 1} onClick={() => goToPage(page - 1)}>上一页</button>

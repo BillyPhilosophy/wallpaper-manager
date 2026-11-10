@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-const item = { workshopId: '123', title: 'Aurora Landscape', description: 'Fixture scene', type: 'scene', officialPreviewUrl: null, previewContentType: null, metadataJson: { title: 'Aurora Landscape' }, localStatus: 'not_downloaded' };
+const item = { workshopId: '123', title: 'Aurora Landscape', description: 'Fixture scene', type: 'scene', officialPreviewUrl: null, previewContentType: null, metadataJson: { title: 'Aurora Landscape' }, localStatus: 'not_downloaded', favorited: false };
 test.beforeEach(async ({ page }) => {
   await page.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, (route) => route.abort());
 });
