@@ -3,7 +3,6 @@ import type { Favorite, Page } from '@wallpaper-manager/contracts';
 import { api } from '../api';
 import { useRemote } from '../hooks';
 import { WallpaperCard } from '../components/WallpaperCard';
-import { FavoriteButton } from '../components/FavoriteButton';
 
 export function FavoritesPage() {
   const [q, setQ] = useState('');
@@ -28,7 +27,7 @@ export function FavoritesPage() {
     <div className="filters"><input placeholder="筛选标题或 ID" aria-label="筛选标题或 ID" value={q} onChange={(event) => { setQ(event.target.value); setPage(1); }}/></div>
     {error && <div className="error-state">{error}<button className="text-button" onClick={reload}>重试</button></div>}
     {loading && data && <div className="inline-loading" role="status">正在更新收藏…</div>}
-    {loading && !data ? <div className="loading" role="status">正在读取收藏…</div> : <div className={`wallpaper-grid${loading ? ' is-loading' : ''}`}>{data?.items.map((fav) => { const item = { ...fav, description: null, subscribed: false, favorited: true, previewContentType: null, metadataJson: {}, localStatus: 'not_downloaded' as const }; return <WallpaperCard key={fav.workshopId} item={item} action={<FavoriteButton item={item} onChange={reload}/>}/>; })}</div>}
+    {loading && !data ? <div className="loading" role="status">正在读取收藏…</div> : <div className={`wallpaper-grid${loading ? ' is-loading' : ''}`}>{data?.items.map((fav) => { const item = { ...fav, description: null, subscribed: false, favorited: true, previewContentType: null, metadataJson: {}, localStatus: 'not_downloaded' as const }; return <WallpaperCard key={fav.workshopId} item={item} onFavoriteChange={reload}/>; })}</div>}
     {!loading && !error && data && !data.items.length ? <div className="empty-state">还没有收藏的壁纸。</div> : null}
     <div className="pagination">
       <button className="secondary" disabled={loading || !data || page <= 1} onClick={() => goToPage(page - 1)}>上一页</button>

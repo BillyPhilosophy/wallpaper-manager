@@ -4,7 +4,6 @@ import { api } from '../api';
 import { useRemote } from '../hooks';
 import { MultiSelectFilter } from '../components/MultiSelectFilter';
 import { WallpaperCard } from '../components/WallpaperCard';
-import { FavoriteButton } from '../components/FavoriteButton';
 import { librarySession, ratingOptions, saveLibrarySession, typeOptions } from '../features/library/session';
 
 export function LibraryPage() {
@@ -41,7 +40,7 @@ export function LibraryPage() {
     <div className="filters"><input placeholder="筛选标题或 ID" aria-label="筛选标题或 ID" value={q} onChange={(event) => changeQ(event.target.value)}/><MultiSelectFilter label="类型" options={typeOptions} selected={types} onChange={changeTypes}/><MultiSelectFilter label="内容分级" options={ratingOptions} selected={ratings} onChange={changeRatings}/></div>
     {error && <div className="error-state">{error}<button className="text-button" onClick={reload}>重试</button></div>}
     {loading && data && <div className="inline-loading" role="status">正在更新壁纸库…</div>}
-    {loading && !data ? <div className="loading" role="status">正在读取壁纸库…</div> : <div className={`wallpaper-grid${loading ? ' is-loading' : ''}`}>{data?.items.map((wallpaper) => { const item = { ...wallpaper, metadataJson: wallpaper.metadataJson as Record<string, unknown>, localStatus: wallpaper.status, previewContentType: null }; return <WallpaperCard key={wallpaper.workshopId} item={item} action={<><FavoriteButton item={item} onChange={reload}/>{wallpaper.status === 'downloaded' ? <button className="danger" onClick={() => void remove(wallpaper.workshopId)}>删除</button> : null}</>}/>; })}</div>}
+    {loading && !data ? <div className="loading" role="status">正在读取壁纸库…</div> : <div className={`wallpaper-grid${loading ? ' is-loading' : ''}`}>{data?.items.map((wallpaper) => { const item = { ...wallpaper, metadataJson: wallpaper.metadataJson as Record<string, unknown>, localStatus: wallpaper.status, previewContentType: null }; return <WallpaperCard key={wallpaper.workshopId} item={item} onFavoriteChange={reload} action={wallpaper.status === 'downloaded' ? <button className="danger" onClick={() => void remove(wallpaper.workshopId)}>删除</button> : null}/>; })}</div>}
     {!loading && !error && data && !data.items.length ? <div className="empty-state">还没有匹配的壁纸。</div> : null}
     <div className="pagination">
       <button className="secondary" disabled={loading || !data || page <= 1} onClick={() => goToPage(page - 1)}>上一页</button>

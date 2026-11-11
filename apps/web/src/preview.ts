@@ -1,5 +1,6 @@
 import type { PreviewDescriptor } from '@wallpaper-manager/contracts';
 import { WebWallGlAdapter } from './features/live-preview/adapter';
+import './preview.css';
 
 const host = document.getElementById('preview');
 let engine: WebWallGlAdapter | null = null;
