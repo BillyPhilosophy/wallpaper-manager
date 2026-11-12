@@ -45,4 +45,14 @@ describe('WebWallGlAdapter', () => {
     expect(instance.release).toHaveBeenCalledOnce();
     expect(instance.destroy).toHaveBeenCalledWith({ releasePkgCache: true });
   });
+
+  it('uses a noninteractive, cover-fit background profile', async () => {
+    const adapter = new WebWallGlAdapter();
+    const container = document.createElement('div');
+    await adapter.mount(container, descriptor, { fit: 'cover', fps: 30, interactive: false });
+    expect(vi.mocked(mount).mock.calls[0][1]).toMatchObject({ fit: 'cover', fps: 30 });
+    fireEvent.mouseMove(container, { clientX: 20, clientY: 20 });
+    expect(instance.pushPointer).not.toHaveBeenCalled();
+    await adapter.unmount();
+  });
 });

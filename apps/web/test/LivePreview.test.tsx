@@ -25,4 +25,13 @@ describe('LivePreview', () => {
     expect(view.getByText('实时预览已降级：本地视频加载失败')).toBeTruthy();
     expect(view.getByLabelText('官方预览').getAttribute('src')).toBe('https://example.test/official.mp4');
   });
+
+  it('uses a passive background renderer without pointer lock or controls', () => {
+    const view = render(<LivePreview descriptor={descriptor} background paused/>);
+    const frame = view.container.querySelector('iframe') as HTMLIFrameElement;
+    expect(frame.getAttribute('sandbox')).toBe('allow-scripts allow-same-origin');
+    expect(frame.getAttribute('tabindex')).toBe('-1');
+    expect(frame.classList.contains('background-renderer')).toBe(true);
+    view.unmount();
+  });
 });

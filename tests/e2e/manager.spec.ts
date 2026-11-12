@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-const item = { workshopId: '123', title: 'Aurora Landscape', description: 'Fixture scene', type: 'scene', officialPreviewUrl: null, previewContentType: null, metadataJson: { title: 'Aurora Landscape' }, localStatus: 'not_downloaded', favorited: false };
+const item = { workshopId: '123', title: 'Aurora Landscape', description: 'Fixture scene', type: 'scene', officialPreviewUrl: null, previewContentType: null, metadataJson: { title: 'Aurora Landscape', subscriptions: 12345, favorited: 678 }, localStatus: 'not_downloaded', favorited: false };
 test.beforeEach(async ({ page }) => {
   await page.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, (route) => route.abort());
 });
@@ -79,11 +79,12 @@ test('search filters, page jumps and scroll position are preserved without anoth
   await page.getByLabel('搜索工坊').fill('Aurora');
   await page.getByRole('button', { name: '搜索', exact: true }).click();
   await expect.poll(() => requests.length).toBe(2);
-  await page.locator('.filter-menu').filter({ hasText: '类型' }).locator('summary').click();
+  await page.locator('.filter-menu').filter({ hasText: '类型' }).locator('.menu-trigger').click();
   for (const label of ['网页', '视频', '图片', '应用']) await page.getByLabel(label, { exact: true }).uncheck();
-  await page.locator('.filter-menu').filter({ hasText: '内容分级' }).locator('summary').click();
+  await page.locator('.filter-menu').filter({ hasText: '内容分级' }).locator('.menu-trigger').click();
   await page.getByLabel('PG13', { exact: true }).uncheck();
-  await page.getByLabel('排序方式', { exact: true }).selectOption('subscriptions');
+  await page.getByLabel('排序方式', { exact: true }).click();
+  await page.getByLabel('最多订阅', { exact: true }).click();
   await expect.poll(() => requests.length).toBe(3);
   const params = new URL(requests[2]).searchParams;
   expect(params.get('type')).toBe('scene');
@@ -205,4 +206,40 @@ test('downloaded unsupported type shows official fallback', async ({ page }) => 
   await page.route('**/api/wallpapers/123', (route) => route.fulfill({ json: local }));
   await page.goto('/wallpaper/123'); await page.getByRole('button', { name: '启动实时预览' }).click();
   await expect(page.getByText('该类型不支持浏览器实时预览')).toBeVisible(); await expect(page.getByText('暂无官方预览')).toBeVisible();
+});
+
+test('mobile navigation includes favorites and sorting uses a bottom sheet', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route('**/api/workshop/search**', (route) => route.fulfill({ json: { items: [item, { ...item, workshopId: '456', title: 'Second Wallpaper' }], cursor: null, total: 2 } }));
+  await page.goto('/');
+  const tabs = page.locator('.mobile-tab-bar');
+  await expect(tabs.getByRole('link', { name: '我的收藏', exact: true })).toBeVisible();
+  const first = await page.locator('.wallpaper-card').nth(0).boundingBox();
+  const second = await page.locator('.wallpaper-card').nth(1).boundingBox();
+  expect(first && second && second.x > first.x && Math.abs(second.y - first.y) < 2).toBe(true);
+  await expect(page.locator('.card-stats').first()).toContainText('1.2万');
+  await expect(page.locator('.card-stats').first()).toContainText('678');
+  await page.getByLabel('排序方式', { exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '排序方式', exact: true });
+  await expect(dialog).toBeVisible();
+  const box = await dialog.boundingBox();
+  expect(box && box.width > 340 && box.y + box.height <= 844).toBe(true);
+  await page.getByLabel('最多订阅', { exact: true }).click();
+  await expect(page.getByRole('dialog', { name: '排序方式' })).toHaveCount(0);
+});
+
+test('appearance settings persist theme and a downloaded dynamic background', async ({ page }) => {
+  const local = { ...item, contentRating: 'everyone', subscribed: false, localStatus: 'downloaded', status: 'downloaded', localRelativePath: '123', fileSizeBytes: '1024', lastErrorCode: null, lastErrorMessage: null, downloadedAt: new Date().toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  await page.route('**/api/wallpapers?**', (route) => route.fulfill({ json: { items: [local], page: 1, pageSize: 100, total: 1 } }));
+  await page.route('**/api/wallpapers/123/preview-descriptor', (route) => route.fulfill({ json: { workshopId: '123', mode: 'webwallgl', type: 'scene', resourceBaseUrl: '/api/wallpapers/123/resources', entry: 'scene.pkg', fallbackPreviewUrl: null, degraded: false, message: null } }));
+  await page.route('**/api/system/capabilities', (route) => route.fulfill({ json: { workerReady: true, steamAuthenticated: false, steamApiKeyConfigured: true, livePreviewTypes: ['scene', 'web'], webwallglVersion: '3.0.0' } }));
+  await page.route('**/api/steam/auth/status', (route) => route.fulfill({ json: { status: 'auth_required', message: null, accountName: null, steamId: null, updatedAt: new Date().toISOString() } }));
+  await page.route('**/api/steam/auth/qr', (route) => route.fulfill({ json: { status: 'auth_required', qrCode: null, updatedAt: null } }));
+  await page.goto('/settings');
+  await page.getByRole('button', { name: '浅色', exact: true }).click();
+  await page.getByRole('button', { name: 'Aurora Landscape', exact: true }).click();
+  const settings = await page.evaluate(() => JSON.parse(localStorage.getItem('wallpaper-appearance-v1') || '{}'));
+  expect(settings).toMatchObject({ theme: 'light', backgroundMode: 'dynamic', backgroundId: '123' });
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await expect(page.locator('.dynamic-background iframe')).toHaveAttribute('sandbox', 'allow-scripts allow-same-origin');
 });

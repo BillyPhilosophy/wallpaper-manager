@@ -4,6 +4,8 @@ import { api, post } from '../api';
 import { useRemote } from '../hooks';
 import { MultiSelectFilter } from '../components/MultiSelectFilter';
 import { WallpaperCard } from '../components/WallpaperCard';
+import { SortMenu } from '../components/SortMenu';
+import { Icon } from '../components/Icon';
 import { cachedSearch, invalidateSearch, ratingOptions, saveSearchSession, searchKey, searchSession, sortOptions, typeOptions, type SearchRating, type SearchSort, type SearchType } from '../features/search/session';
 import { contentFilterEnabled } from '../features/content-filter';
 
@@ -83,12 +85,12 @@ export function SearchPage() {
   const changeSort = (value: SearchSort) => { searchSession.sort = value; searchSession.page = 1; saveSearchSession(); setSort(value); setPage(1); };
   return <section aria-busy={loading}>
     <div className="page-heading"><div><p className="eyebrow">STEAM WORKSHOP</p><h1>发现下一张壁纸</h1><p>搜索官方创意工坊，将原始文件安全发布到共享壁纸库。</p></div></div>
-    <form className="search-bar" onSubmit={submit}><input value={input} onChange={(event) => { searchSession.input = event.target.value; saveSearchSession(); setInput(event.target.value); }} placeholder="搜索壁纸、场景或艺术家…" aria-label="搜索工坊"/><button>搜索</button></form>
-    <div className="filters"><MultiSelectFilter label="类型" options={typeOptions} selected={types} onChange={changeTypes}/><MultiSelectFilter label="内容分级" options={availableRatingOptions} selected={ratings} onChange={changeRatings}/><select aria-label="排序方式" value={sort} onChange={(event) => changeSort(event.target.value as SearchSort)}>{sortOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
+    <form className="search-bar" onSubmit={submit}><input value={input} onChange={(event) => { searchSession.input = event.target.value; saveSearchSession(); setInput(event.target.value); }} placeholder="搜索壁纸、场景或艺术家…" aria-label="搜索工坊"/><button className="search-submit" aria-label="搜索"><Icon name="search" size={19}/><span>搜索</span></button></form>
+    <div className="filters"><MultiSelectFilter label="类型" options={typeOptions} selected={types} onChange={changeTypes}/><MultiSelectFilter label="内容分级" options={availableRatingOptions} selected={ratings} onChange={changeRatings}/><SortMenu options={sortOptions} value={sort} onChange={changeSort}/></div>
     {contentFilter && <p className="filter-notice">内容过滤已开启：不显示成人和未分级内容，可在 Steam 设置中关闭。</p>}
     {error && <div className="error-state">{error}<button className="text-button" onClick={refresh}>重试</button></div>}
     {loading && data && <div className="inline-loading" role="status">正在更新搜索结果…</div>}
-    {loading && !data ? <div className="loading" role="status">正在连接 Steam 创意工坊…</div> : <div className={`wallpaper-grid${loading ? ' is-loading' : ''}`}>{data?.items.map((item) => <WallpaperCard key={item.workshopId} item={item} onFavoriteChange={refresh} action={item.localStatus === 'not_downloaded' ? <button disabled={busy === item.workshopId} onClick={() => void download(item.workshopId)}>{busy === item.workshopId ? '正在入队' : '下载'}</button> : null}/>)}</div>}
+    {loading && !data ? <div className="loading" role="status">正在连接 Steam 创意工坊…</div> : <div className={`wallpaper-grid${loading ? ' is-loading' : ''}`}>{data?.items.map((item) => <WallpaperCard key={item.workshopId} item={item} showStats onFavoriteChange={refresh} action={item.localStatus === 'not_downloaded' ? <button className="card-icon-action" aria-label={busy === item.workshopId ? '正在入队' : '下载'} title="下载" disabled={busy === item.workshopId} onClick={() => void download(item.workshopId)}><Icon name="download" size={18}/></button> : null}/>)}</div>}
     {!loading && data && !data.items.length && <div className="empty-state">没有找到匹配的壁纸。</div>}
     <div className="pagination">
       <button className="secondary" disabled={loading || !data || page <= 1} onClick={() => goToPage(page - 1)}>上一页</button>

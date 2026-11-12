@@ -4,6 +4,7 @@ import { api, post } from '../api';
 import { useRemote } from '../hooks';
 import { AsciiQrCode } from '../components/AsciiQrCode';
 import { contentFilterEnabled, setContentFilterEnabled } from '../features/content-filter';
+import { AppearancePanel } from '../features/appearance/AppearancePanel';
 
 export function SettingsPage() {
   const capabilities = useRemote<Capabilities & { steamApiKeyConfigured: boolean }>(() => api('/system/capabilities'), [], 5000);
@@ -38,6 +39,7 @@ export function SettingsPage() {
   return <section>
     <div className="page-heading"><div><p className="eyebrow">SYSTEM & STEAM</p><h1>设置</h1><p>管理 Steam 会话。扫码登录不需要密码；账密登录的密码仅用于当前请求。</p></div></div>
     <div className="settings-grid">
+      <AppearancePanel/>
       <article className="settings-card"><h2>Steam Web API</h2><p>官方工坊搜索使用服务端环境变量中的独立 API Key。</p><div className="setting-row"><span>API Key</span><strong>{capabilities.data?.steamApiKeyConfigured ? '已配置' : '未配置'}</strong></div><div className="setting-row"><span>Worker</span><strong>{capabilities.data?.workerReady ? '就绪' : '未连接'}</strong></div><div className="setting-row"><span>WebWallGL</span><strong>{capabilities.data?.webwallglVersion || '3.0.0'}</strong></div></article>
       <article className="settings-card"><h2>搜索内容过滤</h2><p>默认只显示全年龄和 PG13 内容，排除成人及未分级项目。关闭后不过滤这些内容。</p><label className="content-filter-toggle"><input type="checkbox" role="switch" checked={contentFilter} onChange={(event) => { setContentFilterEnabled(event.target.checked); setContentFilter(event.target.checked); }}/>过滤成人和未分级内容</label></article>
       <article className="settings-card">
