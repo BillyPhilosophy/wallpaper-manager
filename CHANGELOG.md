@@ -1,19 +1,8 @@
 # Changelog
 
-本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 的记录方式，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
+本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 的记录方式，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)，发布记录由 release-please 根据 Conventional Commits 自动维护。
 
 ## [Unreleased]
-
-### 新增
-
-- Scene 实时预览支持归一化鼠标移动、点击与快速点击保持，Web 壁纸入口注入固定版本 WebWallGL 的 WE API shim。
-- 壁纸大文件可通过 `STEAM_DATA_ROOT` 独立挂载，跨文件系统发布与删除支持复制后删除源目录。
-
-### 变更
-
-- 为兼容自用站点的 Basic Auth 和浏览器存储，Scene／Web 预览改为同源非严格沙箱；仅限可信局域网单用户部署。
-- 修复工坊类型与内容分级筛选、预览资源加载、搜索滚动位置恢复及 CI 测试兼容性。
-- 界面改为深色 iOS 风格磨玻璃与系统蓝配色。
 
 ## [1.0.0] - 2026-11-08
 
@@ -37,5 +26,5 @@
 - Scene/Web 引擎在不含同源权限的 iframe 沙箱中运行。
 - API Key、密码、Guard 码和 maFiles passkey 不写入应用日志。
 
-[Unreleased]: https://github.com/BillyPhilosophy/wallpaper-manager/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/BillyPhilosophy/wallpaper-manager/releases/tag/v1.0.0
+[Unreleased]: https://github.com/BillyPhilosophy/wallpaper-manager/compare/V1.0.0...HEAD
+[1.0.0]: https://github.com/BillyPhilosophy/wallpaper-manager/releases/tag/V1.0.0
