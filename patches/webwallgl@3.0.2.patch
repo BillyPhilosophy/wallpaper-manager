@@ -1,0 +1,27 @@
+diff --git a/types.d.ts b/types.d.ts
+index cdff15a4e36c200d5df2fcd596a15ef65db7fbad..7b9930581871b89210088486cf55b95a3bde8cb1 100644
+--- a/types.d.ts
++++ b/types.d.ts
+@@ -378,6 +378,8 @@ export type MountOptions = {
+      * 只影响场景壁纸；网页壁纸本身就是页面脚本，不受此项控制。
+      */
+     scripts?: boolean;
++    /** 网页壁纸沙箱模式：默认严格隔离；legacy 保留同源能力。 */
++    webSandbox?: "strict" | "legacy";
+     /** 指针源。**当前未接线**，见 PointerSource 说明；外部喂指针请用 pushPointer() */
+     pointer?: PointerSource | null;
+     /**
+diff --git a/webwallgl.mjs b/webwallgl.mjs
+index 3841e809c81dcd7b8c8dda621adfe42624b2c1bb..2531b706c9474ba16389cc95bc9c69418c6127d6 100644
+--- a/webwallgl.mjs
++++ b/webwallgl.mjs
+@@ -35163,7 +35163,8 @@ async function resolveMountConfig(el, o) {
+     // [issue #20] 自动降档开关也必须原样透传：此前白名单重建漏了它，scene-mount
+     // 读到的 cfg.autoQuality 恒 undefined → `!== false` 恒真 → 调用方显式关不掉。
+     autoQuality: o.autoQuality,
+-    scripts: o.scripts !== false
++    scripts: o.scripts !== false,
++    webSandbox: o.webSandbox
+   };
+   let project = null;
+   try {

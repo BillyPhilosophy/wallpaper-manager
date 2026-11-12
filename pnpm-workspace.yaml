@@ -1,3 +1,5 @@
 packages:
   - apps/*
   - packages/*
+patchedDependencies:
+  webwallgl@3.0.2: patches/webwallgl@3.0.2.patch

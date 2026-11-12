@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  webwallgl@3.0.2:
+    hash: c299f259b474aa083b14689590f2b79e7699b7ff1f14b471e01935f663f81ad2
+    path: patches/webwallgl@3.0.2.patch
+
 importers:
 
   .:
@@ -66,8 +71,8 @@ importers:
         specifier: ^8.12.4
         version: 8.12.4
       webwallgl:
-        specifier: 3.0.0
-        version: 3.0.0
+        specifier: 3.0.2
+        version: 3.0.2(patch_hash=c299f259b474aa083b14689590f2b79e7699b7ff1f14b471e01935f663f81ad2)
     devDependencies:
       '@nestjs/cli':
         specifier: ^11.0.16
@@ -100,8 +105,8 @@ importers:
         specifier: ^7.13.0
         version: 7.18.5(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       webwallgl:
-        specifier: 3.0.0
-        version: 3.0.0
+        specifier: 3.0.2
+        version: 3.0.2(patch_hash=c299f259b474aa083b14689590f2b79e7699b7ff1f14b471e01935f663f81ad2)
     devDependencies:
       '@tailwindcss/vite':
         specifier: ^4.3.5
@@ -2919,8 +2924,8 @@ packages:
       webpack-cli:
         optional: true
 
-  webwallgl@3.0.0:
-    resolution: {integrity: sha512-If5DUW3hHeWOyyhvswHkycWm0U5mWJUpKb4ws/J+jrwK3gUbmpoyyACfezKClrcpMB8u2UNyl/ni3M0Z2gjjww==}
+  webwallgl@3.0.2:
+    resolution: {integrity: sha512-mYb/zwq9vDVF8KLOBswZEf+DZ3bvVLnrcTjqzEf2oKV4hfrobCBnDTXJ9goEiK/eNGdL4xyEJX+bxJmvh1jfHA==}
 
   whatwg-mimetype@4.0.0:
     resolution: {integrity: sha512-QaKxh0eNIi2mE9p2vEdzfagOKHCcj1pJ56EEHGQOVxp8r9/iszLUUV7v89x9O1p/T+NlTM5W7jW6+cz4Fq1YVg==}
@@ -5644,7 +5649,7 @@ snapshots:
       - postcss
       - uglify-js
 
-  webwallgl@3.0.0:
+  webwallgl@3.0.2(patch_hash=c299f259b474aa083b14689590f2b79e7699b7ff1f14b471e01935f663f81ad2):
     dependencies:
       mediabunny: 1.65.2
 

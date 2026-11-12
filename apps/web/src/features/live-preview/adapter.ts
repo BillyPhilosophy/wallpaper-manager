@@ -1,4 +1,4 @@
-import { httpSource, mount, type SceneInstance } from 'webwallgl';
+import { httpSource, mount, type MountOptions as WebWallGlMountOptions, type SceneInstance } from 'webwallgl';
 import type { PreviewDescriptor } from '@wallpaper-manager/contracts';
 export interface LivePreviewAdapter { mount(container: HTMLElement, descriptor: PreviewDescriptor, options?: MountOptions): Promise<void>; unmount(): Promise<void>; pause(): void; resume(): void }
 interface MountOptions { fit?: 'contain' | 'cover'; fps?: number; interactive?: boolean }
@@ -7,7 +7,7 @@ export class WebWallGlAdapter implements LivePreviewAdapter {
   private pointerCleanup: (() => void) | null = null;
   async mount(container: HTMLElement, descriptor: PreviewDescriptor, mountOptions: MountOptions = {}) {
     await this.unmount(); if (!descriptor.resourceBaseUrl) throw new Error('缺少本地资源地址');
-    const options = { source: httpSource(descriptor.resourceBaseUrl), fit: mountOptions.fit || ('contain' as const), scripts: descriptor.type === 'scene', fps: mountOptions.fps || 45, autoQuality: true, webSandbox: 'legacy' as const };
+    const options: WebWallGlMountOptions = { source: httpSource(descriptor.resourceBaseUrl), fit: mountOptions.fit || 'contain', scripts: descriptor.type === 'scene', fps: mountOptions.fps || 45, autoQuality: true, webSandbox: 'legacy' };
     const instance = await mount(container, options);
     this.instance = instance;
     if (descriptor.type === 'scene' && mountOptions.interactive !== false) this.bindPointer(container, instance);

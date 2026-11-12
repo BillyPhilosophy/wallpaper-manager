@@ -12,7 +12,7 @@
 - 查看官方图片、动图、视频及完整元数据。
 - 默认使用 Steam 手机 App 扫码登录，也支持账密登录、steamguard-cli 自动令牌和手工 Guard。
 - 下载、取消、重试和删除壁纸，展示真实任务阶段、字节占比和平均下载速率；没有可靠数据时不伪造百分比。
-- 使用固定版本的 `webwallgl@3.0.0` 在线预览已下载的 Scene／Web 壁纸，支持鼠标移动、点击、本地视频播放和全屏预览。为兼容自用站点的 Basic Auth 与存储 API，Scene／Web 预览使用同源非严格沙箱；壁纸脚本因此能访问本站 API 和存储，仅限可信局域网单用户使用。
+- 使用固定版本的 `webwallgl@3.0.2` 在线预览已下载的 Scene／Web 壁纸，支持鼠标移动、点击、本地视频播放和全屏预览。为兼容自用站点的 Basic Auth 与存储 API，Scene／Web 预览使用同源非严格沙箱；壁纸脚本因此能访问本站 API 和存储，仅限可信局域网单用户使用。
 - 搜索支持类型、内容分级和排序；设置页默认过滤成人及未分级内容，可主动关闭。
 - 与 DSH 共用同一份原始工坊文件，下载后即可在 DSH 壁纸库中使用。
 - 通过暂存目录、资源校验和同盘原子发布与跨盘完整复制，避免网站或 DSH 读取半成品。
@@ -271,7 +271,13 @@ tests/                 fixtures、集成测试和 E2E 测试
 
 ## 发布与变更记录
 
-版本变化记录在 [CHANGELOG.md](CHANGELOG.md)。发布新版本前，将 `Unreleased` 中的内容整理到新的版本号和日期下，同步更新 `package.json`，完成测试后再创建 Git 标签和 GitHub Release。镜像发布使用 GitHub Actions 中的手动 `build-images` 工作流。
+版本变化由 release-please 根据 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/) 自动汇总到 [CHANGELOG.md](CHANGELOG.md)，日常不需要手工整理 `Unreleased`。提交标题使用 `feat: 新功能`、`fix: 修复问题`、`perf: 性能优化`、`docs: 文档` 等形式；`feat` 提升次版本，`fix`／`perf` 提升修订版本，类型后的 `!` 或正文中的 `BREAKING CHANGE` 提升主版本。
+
+推送到 `main` 后，`release-please` 工作流会创建或更新标题为 `chore(release): <版本号>` 的发布 PR，自动更新版本清单、根 `package.json` 和 CHANGELOG。检查发布 PR 后将其合并，即可自动创建小写 `v` 前缀的 Git 标签和 GitHub Release。首次发布 PR 以历史标签 `V1.0.0` 的提交为基线；首个发布 PR 合并后，可删除 `release-please-config.json` 中的 `bootstrap-sha`。
+
+默认使用内置 `GITHUB_TOKEN`。如需让发布 PR 继续触发 CI 等后续工作流，可在仓库 Secrets 中配置具有仓库内容和 PR 写权限的 `RELEASE_PLEASE_TOKEN`。若发布 PR 创建失败，还需在仓库 Settings → Actions → General 中允许 GitHub Actions 创建 Pull Request。
+
+镜像发布仍使用 GitHub Actions 中的手动 `build-images` 工作流；创建 Release 后，在同一版本提交上运行该工作流，不会随 Release 自动发布镜像。
 
 ### 最近提交记录
 

@@ -2,6 +2,7 @@ FROM node:22-bookworm-slim AS build
 WORKDIR /app
 RUN corepack enable && apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
+COPY patches ./patches
 COPY packages ./packages
 COPY apps/api ./apps/api
 RUN pnpm install --frozen-lockfile && pnpm -r --filter @wallpaper-manager/api... build
