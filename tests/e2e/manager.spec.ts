@@ -271,3 +271,46 @@ test('WebWallGL web wallpapers load resources from the site origin', async ({ pa
   expect(await wallpaperFrame?.evaluate(() => window.location.origin)).toBe('http://127.0.0.1:5173');
   await expect(wallpaperFrame?.locator('body')).toHaveAttribute('data-resource-status', '200');
 });
+
+test('search restores selected ratings after detail navigation when content filtering is disabled', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('wallpaper-content-filter', 'false'));
+  const requests: string[] = [];
+  const pg13Item = { ...item, contentRating: 'pg13' };
+  await page.route('**/api/workshop/search**', (route) => { requests.push(route.request().url()); return route.fulfill({ json: { items: [pg13Item], cursor: null, total: 1 } }); });
+  await page.route('**/api/workshop/items/123', (route) => route.fulfill({ json: pg13Item }));
+  await page.route('**/api/wallpapers/123/preview-descriptor', (route) => route.fulfill({ json: { workshopId: '123', mode: 'official-preview', type: 'scene', fallbackPreviewUrl: null, degraded: true, message: null } }));
+  await page.route('**/api/wallpapers/123', (route) => route.fulfill({ json: { ...pg13Item, status: 'not_downloaded', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() } }));
+  await page.route('**/api/wallpapers?**', (route) => route.fulfill({ json: { items: [], page: 1, pageSize: 100, total: 0 } }));
+  await page.goto('/');
+  await page.getByLabel('搜索工坊').fill('Aurora');
+  await page.getByRole('button', { name: '搜索', exact: true }).click();
+  await page.locator('.filter-menu').filter({ hasText: '内容分级' }).locator('.menu-trigger').click();
+  await page.getByLabel('全年龄', { exact: true }).uncheck();
+  await page.getByLabel('成人', { exact: true }).uncheck();
+  await page.getByRole('button', { name: '完成', exact: true }).click();
+  await expect.poll(() => new URL(requests.at(-1)!).searchParams.get('rating')).toBe('pg13');
+  await page.locator('.wallpaper-card a').first().click();
+  await page.getByRole('link', { name: '← 返回壁纸库' }).click();
+  await expect(page.getByLabel('搜索工坊')).toHaveValue('Aurora');
+  await expect(page.locator('.wallpaper-card')).toBeVisible();
+  await page.locator('.filter-menu').filter({ hasText: '内容分级' }).locator('.menu-trigger').click();
+  await expect(page.getByLabel('全年龄', { exact: true })).not.toBeChecked();
+  await expect(page.getByLabel('PG13', { exact: true })).toBeChecked();
+  await expect(page.getByLabel('成人', { exact: true })).not.toBeChecked();
+});
+
+test('enabled content filtering removes mature from restored ratings without resetting other selections', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('wallpaper-content-filter', 'true');
+    sessionStorage.setItem('wallpaper-search', JSON.stringify({ ratings: ['pg13', 'mature'] }));
+  });
+  const requests: string[] = [];
+  await page.route('**/api/workshop/search**', (route) => { requests.push(route.request().url()); return route.fulfill({ json: { items: [], cursor: null, total: 0 } }); });
+  await page.goto('/');
+  await expect.poll(() => requests.length).toBe(1);
+  expect(new URL(requests[0]).searchParams.get('rating')).toBe('pg13');
+  await page.locator('.filter-menu').filter({ hasText: '内容分级' }).locator('.menu-trigger').click();
+  await expect(page.getByLabel('全年龄', { exact: true })).not.toBeChecked();
+  await expect(page.getByLabel('PG13', { exact: true })).toBeChecked();
+  await expect(page.getByLabel('成人', { exact: true })).toHaveCount(0);
+});

@@ -12,7 +12,7 @@ import { contentFilterEnabled } from '../features/content-filter';
 export function SearchPage() {
   const contentFilter = contentFilterEnabled();
   const availableRatingOptions = contentFilter ? ratingOptions.filter((option) => option.value !== 'mature') : ratingOptions;
-  const initialRatings = contentFilter ? searchSession.ratings.filter((value) => value !== 'mature') : ratingOptions.map((option) => option.value);
+  const initialRatings = contentFilter ? searchSession.ratings.filter((value) => value !== 'mature') : searchSession.ratings;
   const [input, setInput] = useState(searchSession.input);
   const [query, setQuery] = useState(searchSession.query);
   const [page, setPage] = useState(searchSession.page);
