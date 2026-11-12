@@ -277,7 +277,7 @@ tests/                 fixtures、集成测试和 E2E 测试
 
 默认使用内置 `GITHUB_TOKEN`。如需让发布 PR 继续触发 CI 等后续工作流，可在仓库 Secrets 中配置具有仓库内容和 PR 写权限的 `RELEASE_PLEASE_TOKEN`。若发布 PR 创建失败，还需在仓库 Settings → Actions → General 中允许 GitHub Actions 创建 Pull Request。
 
-镜像发布仍使用 GitHub Actions 中的手动 `build-images` 工作流；创建 Release 后，在同一版本提交上运行该工作流，不会随 Release 自动发布镜像。
+镜像发布仍使用 GitHub Actions 中的手动 `build-images` 工作流；创建 Release 后，在同一版本提交上运行该工作流，不会随 Release 自动发布镜像。运行时可通过 `service` 参数选择 `web`、`api`、`worker` 中的单个镜像，默认 `all` 同时构建三个镜像。
 
 ### 最近提交记录
 
