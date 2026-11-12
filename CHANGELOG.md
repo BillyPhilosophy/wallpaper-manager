@@ -2,6 +2,13 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 的记录方式，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)，发布记录由 release-please 根据 Conventional Commits 自动维护。
 
+## [1.1.1](https://github.com/BillyPhilosophy/wallpaper-manager/compare/v1.1.0...v1.1.1) (2026-11-12)
+
+
+### 修复
+
+* **web:** preserve search rating selections ([f4455a4](https://github.com/BillyPhilosophy/wallpaper-manager/commit/f4455a43163b7f9422bad0980e7ccdcbfadee9e6))
+
 ## [1.1.0](https://github.com/BillyPhilosophy/wallpaper-manager/compare/v1.0.0...v1.1.0) (2026-11-12)
 
 
