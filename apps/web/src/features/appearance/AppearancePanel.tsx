@@ -45,5 +45,9 @@ export function AppearancePanel() {
       </div> : <p className="muted">还没有已下载的壁纸，下载后即可设为页面背景。</p>}
     </div>
     <label className="dimming-control"><span>背景压暗 <strong>{settings.dimming}%</strong></span><input type="range" min="0" max="80" step="5" value={settings.dimming} disabled={settings.backgroundMode === 'off'} onChange={(event) => update({ dimming: Number(event.target.value) })}/></label>
+    <div className="appearance-section">
+      <label className="content-filter-toggle"><input type="checkbox" role="switch" checked={settings.audioEnabled} onChange={(event) => update({ audioEnabled: event.target.checked })}/>播放壁纸音频</label>
+      <p>默认开启，实时预览和动态背景均可使用源文件音轨。音频仅在当前标签页可见时播放；没有音轨的源文件保持无声。</p>
+    </div>
   </article>;
 }

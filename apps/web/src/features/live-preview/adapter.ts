@@ -1,6 +1,6 @@
 import { httpSource, mount, type SceneInstance } from 'webwallgl';
 import type { PreviewDescriptor } from '@wallpaper-manager/contracts';
-export interface LivePreviewAdapter { mount(container: HTMLElement, descriptor: PreviewDescriptor, options?: MountOptions): Promise<void>; unmount(): Promise<void>; pause(): void; resume(): void }
+export interface LivePreviewAdapter { mount(container: HTMLElement, descriptor: PreviewDescriptor, options?: MountOptions): Promise<void>; unmount(): Promise<void>; pause(): void; resume(): void; setVolume(volume: number): void }
 interface MountOptions { fit?: 'contain' | 'cover'; fps?: number; interactive?: boolean }
 export class WebWallGlAdapter implements LivePreviewAdapter {
   private instance: SceneInstance | null = null;
@@ -66,4 +66,5 @@ export class WebWallGlAdapter implements LivePreviewAdapter {
   }
   pause() { this.instance?.pause(); }
   resume() { this.instance?.resume(); }
+  setVolume(volume: number) { this.instance?.setVolume(volume); }
 }

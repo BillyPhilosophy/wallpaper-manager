@@ -6,9 +6,12 @@ const host = document.getElementById('preview');
 let engine: WebWallGlAdapter | null = null;
 let generation = 0;
 let manuallyPaused = false;
+let audioEnabled = true;
 
 function syncPlayback() {
-  if (manuallyPaused || document.hidden) engine?.pause();
+  const inactive = manuallyPaused || document.hidden;
+  engine?.setVolume(!inactive && audioEnabled ? 1 : 0);
+  if (inactive) engine?.pause();
   else engine?.resume();
 }
 
@@ -16,6 +19,11 @@ window.addEventListener('message', (event) => {
   if (!host || event.source !== window.parent) return;
   if (event.data?.type === 'wm-preview-pause') {
     manuallyPaused = Boolean(event.data.paused);
+    syncPlayback();
+    return;
+  }
+  if (event.data?.type === 'wm-preview-audio') {
+    audioEnabled = Boolean(event.data.enabled);
     syncPlayback();
     return;
   }

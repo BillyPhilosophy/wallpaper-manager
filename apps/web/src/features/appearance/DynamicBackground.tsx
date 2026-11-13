@@ -30,7 +30,7 @@ export function DynamicBackground() {
   const data = descriptor.data;
   return <div className={`dynamic-background${enabled ? ' is-enabled' : ''}`} aria-hidden="true">
     {enabled && data?.fallbackPreviewUrl && <img className="background-poster" src={data.fallbackPreviewUrl} alt=""/>}
-    {enabled && settings.backgroundMode === 'dynamic' && !reducedMotion && data && <LivePreview descriptor={data} background paused={previewActive}/>}
+    {enabled && settings.backgroundMode === 'dynamic' && !reducedMotion && data && <LivePreview descriptor={data} background paused={previewActive} audioEnabled={settings.audioEnabled}/>}
     <div className="background-dimming" style={{ opacity: enabled ? settings.dimming / 100 : 0 }}/>
   </div>;
 }

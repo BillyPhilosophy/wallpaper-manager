@@ -238,6 +238,11 @@ test('appearance settings persist theme and a downloaded dynamic background', as
   await page.goto('/settings');
   await page.getByRole('button', { name: '浅色', exact: true }).click();
   await page.getByRole('button', { name: 'Aurora Landscape', exact: true }).click();
+  const audio = page.getByRole('switch', { name: '播放壁纸音频', exact: true });
+  await expect(audio).toBeChecked();
+  await audio.uncheck();
+  await expect(audio).not.toBeChecked();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('wallpaper-appearance-v1') || '{}').audioEnabled)).toBe(false);
   const settings = await page.evaluate(() => JSON.parse(localStorage.getItem('wallpaper-appearance-v1') || '{}'));
   expect(settings).toMatchObject({ theme: 'light', backgroundMode: 'dynamic', backgroundId: '123' });
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');

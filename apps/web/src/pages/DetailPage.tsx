@@ -16,7 +16,7 @@ export function DetailPage() {
   const previewRef = useRef<HTMLDivElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [immersive, setImmersive] = useState(false);
-  const { update: updateAppearance } = useAppearance();
+  const { settings, update: updateAppearance } = useAppearance();
   const remote = useRemote<WorkshopItem>(() => api(`/workshop/items/${workshopId}`), [workshopId]);
   const local = useRemote<Wallpaper>(() => api(`/wallpapers/${workshopId}`), [workshopId]);
   const descriptor = useRemote<PreviewDescriptor>(() => api(`/wallpapers/${workshopId}/preview-descriptor`), [workshopId, local.data?.status]);
@@ -65,7 +65,7 @@ export function DetailPage() {
     <Link className="back-link" to="..">← 返回壁纸库</Link>
     <div className="detail-layout">
       <div className={`detail-preview${immersive ? ' preview-immersive' : ''}`} ref={previewRef}>
-        {live && descriptor.data && downloaded ? <LivePreview descriptor={descriptor.data}/> : <OfficialPreview url={wallpaper?.officialPreviewUrl || item?.officialPreviewUrl || null} title={title}/>}
+        {live && descriptor.data && downloaded ? <LivePreview descriptor={descriptor.data} audioEnabled={settings.audioEnabled}/> : <OfficialPreview url={wallpaper?.officialPreviewUrl || item?.officialPreviewUrl || null} title={title}/>}
         {live && downloaded && <button type="button" className="preview-fullscreen" aria-pressed={expanded} onClick={() => void toggleFullscreen()}>{expanded ? '退出全屏' : '全屏预览'}</button>}
       </div>
       <div className="detail-copy">

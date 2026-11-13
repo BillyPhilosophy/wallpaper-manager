@@ -8,6 +8,7 @@ export interface AppearanceSettings {
   backgroundMode: BackgroundMode;
   backgroundId: string | null;
   dimming: number;
+  audioEnabled: boolean;
 }
 
 interface AppearanceValue {
@@ -17,7 +18,7 @@ interface AppearanceValue {
 }
 
 const storageKey = 'wallpaper-appearance-v1';
-const defaults: AppearanceSettings = { theme: 'dark', backgroundMode: 'off', backgroundId: null, dimming: 45 };
+const defaults: AppearanceSettings = { theme: 'dark', backgroundMode: 'off', backgroundId: null, dimming: 45, audioEnabled: true };
 const AppearanceContext = createContext<AppearanceValue | null>(null);
 
 function readSettings(): AppearanceSettings {
@@ -28,6 +29,7 @@ function readSettings(): AppearanceSettings {
       backgroundMode: ['off', 'static', 'dynamic'].includes(value.backgroundMode || '') ? value.backgroundMode as BackgroundMode : defaults.backgroundMode,
       backgroundId: typeof value.backgroundId === 'string' && /^\d+$/.test(value.backgroundId) ? value.backgroundId : null,
       dimming: typeof value.dimming === 'number' ? Math.max(0, Math.min(80, value.dimming)) : defaults.dimming,
+      audioEnabled: typeof value.audioEnabled === 'boolean' ? value.audioEnabled : defaults.audioEnabled,
     };
   } catch {
     return defaults;
