@@ -10,6 +10,6 @@ export class SystemController {
     const state = await this.infra.db.steamAuthState.findUnique({ where: { id: 1 } });
     let workerReady = false;
     try { workerReady = (await fetch('http://worker:9780/health', { signal: AbortSignal.timeout(3000) })).ok; } catch { }
-    return { workerReady, steamAuthenticated: state?.status === 'authenticated', steamApiKeyConfigured: Boolean(process.env.STEAM_WEB_API_KEY), livePreviewTypes: ['scene', 'web'], webwallglVersion: '3.0.0' };
+    return { workerReady, steamAuthenticated: state?.status === 'authenticated', steamApiKeyConfigured: Boolean(process.env.STEAM_WEB_API_KEY), livePreviewTypes: ['scene', 'web'], webwallglVersion: '3.0.2' };
   }
 }

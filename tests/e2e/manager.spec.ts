@@ -18,7 +18,7 @@ test('QR login is the default Steam sign-in action', async ({ page }) => {
     if (route.request().method() === 'POST') started = true;
     return route.fulfill({ json: { status: 'qr_required', qrCode: '██  ██  \n  ████  \n██  ██  \n', updatedAt: new Date().toISOString() } });
   });
-  await page.route('**/api/system/capabilities', (route) => route.fulfill({ json: { workerReady: true, steamAuthenticated: false, steamApiKeyConfigured: true, livePreviewTypes: ['scene', 'web'], webwallglVersion: '3.0.0' } }));
+  await page.route('**/api/system/capabilities', (route) => route.fulfill({ json: { workerReady: true, steamAuthenticated: false, steamApiKeyConfigured: true, livePreviewTypes: ['scene', 'web'], webwallglVersion: '3.0.2' } }));
   await page.route('**/api/workshop/subscriptions/sync', (route) => route.fulfill({ json: { status: 'idle', total: 0, synced: 0, message: null, updatedAt: new Date().toISOString() } }));
   await page.goto('/settings');
   await page.getByRole('button', { name: '扫码登录', exact: true }).click();
@@ -30,7 +30,7 @@ test('QR login is the default Steam sign-in action', async ({ page }) => {
 test('content filtering defaults on and can be disabled in settings', async ({ page }) => {
   const requests: string[] = [];
   await page.route('**/api/workshop/search**', (route) => { requests.push(route.request().url()); return route.fulfill({ json: { items: [], cursor: null, total: 0 } }); });
-  await page.route('**/api/system/capabilities', (route) => route.fulfill({ json: { workerReady: true, steamAuthenticated: false, steamApiKeyConfigured: true, livePreviewTypes: ['scene', 'web'], webwallglVersion: '3.0.0' } }));
+  await page.route('**/api/system/capabilities', (route) => route.fulfill({ json: { workerReady: true, steamAuthenticated: false, steamApiKeyConfigured: true, livePreviewTypes: ['scene', 'web'], webwallglVersion: '3.0.2' } }));
   await page.route('**/api/steam/auth/status', (route) => route.fulfill({ json: { status: 'auth_required', message: null, accountName: null, steamId: null, updatedAt: new Date().toISOString() } }));
   await page.goto('/');
   await expect.poll(() => requests.length).toBe(1);
@@ -47,7 +47,7 @@ test('content filtering defaults on and can be disabled in settings', async ({ p
 test('device confirmation does not require a verification code', async ({ page }) => {
   await page.route('**/api/steam/auth/status', (route) => route.fulfill({ json: { status: 'confirmation_required', message: '请在 Steam 手机 App 中确认本次登录', accountName: 'test', steamId: null, updatedAt: new Date().toISOString() } }));
   await page.route('**/api/steam/auth/qr', (route) => route.fulfill({ json: { status: 'confirmation_required', qrCode: null, updatedAt: null } }));
-  await page.route('**/api/system/capabilities', (route) => route.fulfill({ json: { workerReady: true, steamAuthenticated: false, steamApiKeyConfigured: true, livePreviewTypes: ['scene', 'web'], webwallglVersion: '3.0.0' } }));
+  await page.route('**/api/system/capabilities', (route) => route.fulfill({ json: { workerReady: true, steamAuthenticated: false, steamApiKeyConfigured: true, livePreviewTypes: ['scene', 'web'], webwallglVersion: '3.0.2' } }));
   await page.route('**/api/workshop/subscriptions/sync', (route) => route.fulfill({ json: { status: 'idle', total: 0, synced: 0, message: null, updatedAt: new Date().toISOString() } }));
   await page.goto('/settings');
   await expect(page.getByText('等待手机确认', { exact: true })).toBeVisible();
@@ -232,7 +232,7 @@ test('appearance settings persist theme and a downloaded dynamic background', as
   const local = { ...item, contentRating: 'everyone', subscribed: false, localStatus: 'downloaded', status: 'downloaded', localRelativePath: '123', fileSizeBytes: '1024', lastErrorCode: null, lastErrorMessage: null, downloadedAt: new Date().toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
   await page.route('**/api/wallpapers?**', (route) => route.fulfill({ json: { items: [local], page: 1, pageSize: 100, total: 1 } }));
   await page.route('**/api/wallpapers/123/preview-descriptor', (route) => route.fulfill({ json: { workshopId: '123', mode: 'webwallgl', type: 'scene', resourceBaseUrl: '/api/wallpapers/123/resources', entry: 'scene.pkg', fallbackPreviewUrl: null, degraded: false, message: null } }));
-  await page.route('**/api/system/capabilities', (route) => route.fulfill({ json: { workerReady: true, steamAuthenticated: false, steamApiKeyConfigured: true, livePreviewTypes: ['scene', 'web'], webwallglVersion: '3.0.0' } }));
+  await page.route('**/api/system/capabilities', (route) => route.fulfill({ json: { workerReady: true, steamAuthenticated: false, steamApiKeyConfigured: true, livePreviewTypes: ['scene', 'web'], webwallglVersion: '3.0.2' } }));
   await page.route('**/api/steam/auth/status', (route) => route.fulfill({ json: { status: 'auth_required', message: null, accountName: null, steamId: null, updatedAt: new Date().toISOString() } }));
   await page.route('**/api/steam/auth/qr', (route) => route.fulfill({ json: { status: 'auth_required', qrCode: null, updatedAt: null } }));
   await page.goto('/settings');
@@ -247,4 +247,75 @@ test('appearance settings persist theme and a downloaded dynamic background', as
   expect(settings).toMatchObject({ theme: 'light', backgroundMode: 'dynamic', backgroundId: '123' });
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await expect(page.locator('.dynamic-background iframe')).toHaveAttribute('sandbox', 'allow-scripts allow-same-origin');
+});
+
+test('WebWallGL web wallpapers load resources from the site origin', async ({ page }) => {
+  const origins: Array<string | undefined> = [];
+  await page.route('**/api/wallpapers/123/resources/project.json', (route) => route.fulfill({ json: { type: 'web', file: 'image/index.html' } }));
+  await page.route('**/api/wallpapers/123/resources/image/project.json', (route) => route.fulfill({ json: { type: 'web', file: 'image/index.html' } }));
+  await page.route('**/api/wallpapers/123/resources/image/index.html', (route) => route.fulfill({
+    contentType: 'text/html',
+    body: '<!doctype html><html><body><script>fetch(".config.json").then((response) => { document.body.dataset.resourceStatus = String(response.status); });</script></body></html>',
+  }));
+  await page.route('**/api/wallpapers/123/resources/image/.config.json', (route) => {
+    const origin = route.request().headers().origin;
+    origins.push(origin);
+    if (origin === 'null') return route.fulfill({ status: 401, body: 'Unauthorized' });
+    return route.fulfill({ json: {} });
+  });
+  await page.goto('/preview.html');
+  await page.evaluate(() => window.postMessage({
+    type: 'wm-preview-mount',
+    descriptor: { workshopId: '123', mode: 'webwallgl', type: 'web', resourceBaseUrl: '/api/wallpapers/123/resources', entry: 'image/index.html', fallbackPreviewUrl: null, degraded: false, message: null },
+  }, '*'));
+  await expect(page.locator('#preview > iframe')).toHaveAttribute('sandbox', 'allow-scripts allow-same-origin');
+  await expect.poll(() => origins.length).toBe(1);
+  expect(origins[0]).not.toBe('null');
+  await expect.poll(() => page.frames().some((frame) => frame.url().endsWith('/api/wallpapers/123/resources/image/index.html'))).toBe(true);
+  const wallpaperFrame = page.frames().find((frame) => frame.url().endsWith('/api/wallpapers/123/resources/image/index.html'));
+  expect(await wallpaperFrame?.evaluate(() => window.location.origin)).toBe('http://127.0.0.1:5173');
+  await expect(wallpaperFrame?.locator('body')).toHaveAttribute('data-resource-status', '200');
+});
+
+test('search restores selected ratings after detail navigation when content filtering is disabled', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('wallpaper-content-filter', 'false'));
+  const requests: string[] = [];
+  const pg13Item = { ...item, contentRating: 'pg13' };
+  await page.route('**/api/workshop/search**', (route) => { requests.push(route.request().url()); return route.fulfill({ json: { items: [pg13Item], cursor: null, total: 1 } }); });
+  await page.route('**/api/workshop/items/123', (route) => route.fulfill({ json: pg13Item }));
+  await page.route('**/api/wallpapers/123/preview-descriptor', (route) => route.fulfill({ json: { workshopId: '123', mode: 'official-preview', type: 'scene', fallbackPreviewUrl: null, degraded: true, message: null } }));
+  await page.route('**/api/wallpapers/123', (route) => route.fulfill({ json: { ...pg13Item, status: 'not_downloaded', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() } }));
+  await page.route('**/api/wallpapers?**', (route) => route.fulfill({ json: { items: [], page: 1, pageSize: 100, total: 0 } }));
+  await page.goto('/');
+  await page.getByLabel('搜索工坊').fill('Aurora');
+  await page.getByRole('button', { name: '搜索', exact: true }).click();
+  await page.locator('.filter-menu').filter({ hasText: '内容分级' }).locator('.menu-trigger').click();
+  await page.getByLabel('全年龄', { exact: true }).uncheck();
+  await page.getByLabel('成人', { exact: true }).uncheck();
+  await page.getByRole('button', { name: '完成', exact: true }).click();
+  await expect.poll(() => new URL(requests.at(-1)!).searchParams.get('rating')).toBe('pg13');
+  await page.locator('.wallpaper-card a').first().click();
+  await page.getByRole('link', { name: '← 返回壁纸库' }).click();
+  await expect(page.getByLabel('搜索工坊')).toHaveValue('Aurora');
+  await expect(page.locator('.wallpaper-card')).toBeVisible();
+  await page.locator('.filter-menu').filter({ hasText: '内容分级' }).locator('.menu-trigger').click();
+  await expect(page.getByLabel('全年龄', { exact: true })).not.toBeChecked();
+  await expect(page.getByLabel('PG13', { exact: true })).toBeChecked();
+  await expect(page.getByLabel('成人', { exact: true })).not.toBeChecked();
+});
+
+test('enabled content filtering removes mature from restored ratings without resetting other selections', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('wallpaper-content-filter', 'true');
+    sessionStorage.setItem('wallpaper-search', JSON.stringify({ ratings: ['pg13', 'mature'] }));
+  });
+  const requests: string[] = [];
+  await page.route('**/api/workshop/search**', (route) => { requests.push(route.request().url()); return route.fulfill({ json: { items: [], cursor: null, total: 0 } }); });
+  await page.goto('/');
+  await expect.poll(() => requests.length).toBe(1);
+  expect(new URL(requests[0]).searchParams.get('rating')).toBe('pg13');
+  await page.locator('.filter-menu').filter({ hasText: '内容分级' }).locator('.menu-trigger').click();
+  await expect(page.getByLabel('全年龄', { exact: true })).not.toBeChecked();
+  await expect(page.getByLabel('PG13', { exact: true })).toBeChecked();
+  await expect(page.getByLabel('成人', { exact: true })).toHaveCount(0);
 });

@@ -46,7 +46,7 @@ export interface PreviewDescriptor {
   type: WallpaperType; resourceBaseUrl?: string; entry?: string;
   fallbackPreviewUrl: string | null; degraded: boolean; message: string | null;
 }
-export interface Capabilities { workerReady: boolean; steamAuthenticated: boolean; livePreviewTypes: ['scene', 'web']; webwallglVersion: '3.0.0' }
+export interface Capabilities { workerReady: boolean; steamAuthenticated: boolean; livePreviewTypes: ['scene', 'web']; webwallglVersion: '3.0.2' }
 export interface SteamAuthState { status: SteamAuthStatus; message: string | null; accountName: string | null; steamId: string | null; updatedAt: string }
 export type AuthControl = { type: 'login'; username: string; secret: string; steamId?: string } | { type: 'qr'; steamId?: string } | { type: 'guard'; secret: string } | { type: 'logout' };
 export interface QueueLength { length: number }

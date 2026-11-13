@@ -4,6 +4,17 @@ name: build-images
 
 on:
   workflow_dispatch:
+    inputs:
+      service:
+        description: '要构建的镜像（all 表示全部）'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - web
+          - api
+          - worker
 
 env:
   IMAGE_NAMESPACE: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -14,7 +25,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [web, api, worker]
+        service: >-
+          ${{ fromJSON(inputs.service == 'all' && '["web","api","worker"]' || format('["{0}"]', inputs.service)) }}
     steps:
       - uses: actions/checkout@v4
       - name: Set up QEMU

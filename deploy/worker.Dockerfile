@@ -18,6 +18,7 @@ FROM node:22-trixie AS build
 WORKDIR /app
 RUN npm install -g pnpm@10.32.1
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
+COPY patches ./patches
 COPY packages ./packages
 COPY apps/worker ./apps/worker
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile && pnpm -r --filter @wallpaper-manager/worker... build

@@ -4,7 +4,7 @@
 - 目标平台：树莓派 ARM64、Docker Compose、无桌面环境
 - DSH 插件：`elysia395/dsh-wallpaper-engine`
 - 插件核对基线：仓库 `main`，包版本 `1.4.0`，提交 `cde8e9c66972f47f6d369f5e51484ca8fa48c9b5`
-- 网站渲染引擎：固定 `webwallgl@3.0.0`
+- 网站渲染引擎：固定 `webwallgl@3.0.2`
 
 > 本文件是 MVP 的唯一实施基线。任何 Agent 不得自行更换目录契约、队列语义、认证边界或渲染引擎。确需变更时，先提交变更说明并同步修改本文件及相关测试。
 
@@ -44,7 +44,7 @@
 | 下载队列 | BullMQ |
 | 队列存储 | Redis，开启 AOF |
 | 下载器 | Worker 镜像内置树莓派 ARM64 可用的 DepotDownloader 运行环境 |
-| 实时渲染 | `webwallgl@3.0.0`，使用 `save-exact` 固定 |
+| 实时渲染 | `webwallgl@3.0.2`，使用 `save-exact` 固定 |
 | 部署 | Docker Compose |
 | 包管理 | pnpm workspace，锁文件必须提交 |
 | Node.js | `>=22.12.0` |
@@ -627,7 +627,7 @@ API Key 若仅支持环境变量，界面只显示“已配置／未配置”，
 网站直接安装：
 
 ```bash
-pnpm add --save-exact webwallgl@3.0.0
+pnpm add --save-exact webwallgl@3.0.2
 ```
 
 前端只允许通过适配器使用引擎，例如：
@@ -843,7 +843,7 @@ pnpm why webwallgl
 
 交付：
 
-- `webwallgl@3.0.0` 适配器。
+- `webwallgl@3.0.2` 适配器。
 - Scene／Web 预览、降级和资源释放。
 - 不支持类型与 WebGL 失败测试。
 

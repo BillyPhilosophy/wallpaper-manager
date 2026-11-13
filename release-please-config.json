@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "276e41bd1d185f3baf5490dd36c764bdea7dc61a",
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "changelog-path": "CHANGELOG.md",
+      "include-component-in-tag": false,
+      "include-v-in-tag": true,
+      "pull-request-title-pattern": "chore(release): ${version}",
+      "changelog-sections": [
+        { "type": "feat", "section": "新增" },
+        { "type": "fix", "section": "修复" },
+        { "type": "perf", "section": "性能优化" },
+        { "type": "refactor", "section": "重构" },
+        { "type": "revert", "section": "回退" },
+        { "type": "docs", "section": "文档" },
+        { "type": "style", "section": "样式" },
+        { "type": "test", "section": "测试", "hidden": true },
+        { "type": "build", "section": "构建", "hidden": true },
+        { "type": "ci", "section": "CI", "hidden": true },
+        { "type": "chore", "section": "杂项", "hidden": true }
+      ]
+    }
+  }
+}

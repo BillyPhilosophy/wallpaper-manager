@@ -49,7 +49,7 @@ Compose 默认读取 Compose 文件所在目录的 `deploy/.env`，无需 `--env
 
 ### 从 Docker Hub 部署（推荐）
 
-在 GitHub 仓库 Settings → Secrets and variables → Actions 配置 `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN`，然后手动运行 **build-images** 工作流。工作流使用 QEMU 构建 `linux/arm64`，分别发布 `wallpaper-manager-web`、`wallpaper-manager-api`、`wallpaper-manager-worker` 的 `latest` 与 `sha-<完整提交哈希>` 标签。
+在 GitHub 仓库 Settings → Secrets and variables → Actions 配置 `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN`，然后手动运行 **build-images** 工作流。`service` 参数默认 `all`，同时构建三个镜像；只需更新一个服务时可选择 `web`、`api` 或 `worker`，避免构建其他镜像。工作流使用 QEMU 构建 `linux/arm64`，分别发布 `wallpaper-manager-web`、`wallpaper-manager-api`、`wallpaper-manager-worker` 的 `latest` 与 `sha-<完整提交哈希>` 标签。
 
 树莓派取得 `deploy/docker-compose.yml` 和 `deploy/.env.example`，完成 `deploy/.env` 配置后执行：
 
