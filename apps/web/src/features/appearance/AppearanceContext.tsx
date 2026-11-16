@@ -9,6 +9,7 @@ export interface AppearanceSettings {
   backgroundId: string | null;
   dimming: number;
   audioEnabled: boolean;
+  autoQuality: boolean;
 }
 
 interface AppearanceValue {
@@ -18,7 +19,7 @@ interface AppearanceValue {
 }
 
 const storageKey = 'wallpaper-appearance-v1';
-const defaults: AppearanceSettings = { theme: 'dark', backgroundMode: 'off', backgroundId: null, dimming: 45, audioEnabled: true };
+const defaults: AppearanceSettings = { theme: 'dark', backgroundMode: 'off', backgroundId: null, dimming: 45, audioEnabled: true, autoQuality: true };
 const AppearanceContext = createContext<AppearanceValue | null>(null);
 
 function readSettings(): AppearanceSettings {
@@ -30,6 +31,7 @@ function readSettings(): AppearanceSettings {
       backgroundId: typeof value.backgroundId === 'string' && /^\d+$/.test(value.backgroundId) ? value.backgroundId : null,
       dimming: typeof value.dimming === 'number' ? Math.max(0, Math.min(80, value.dimming)) : defaults.dimming,
       audioEnabled: typeof value.audioEnabled === 'boolean' ? value.audioEnabled : defaults.audioEnabled,
+      autoQuality: typeof value.autoQuality === 'boolean' ? value.autoQuality : defaults.autoQuality,
     };
   } catch {
     return defaults;

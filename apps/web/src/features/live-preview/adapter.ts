@@ -1,13 +1,14 @@
 import { httpSource, mount, type MountOptions as WebWallGlMountOptions, type SceneInstance } from 'webwallgl';
 import type { PreviewDescriptor } from '@wallpaper-manager/contracts';
-export interface LivePreviewAdapter { mount(container: HTMLElement, descriptor: PreviewDescriptor, options?: MountOptions): Promise<void>; unmount(): Promise<void>; pause(): void; resume(): void; setVolume(volume: number): void; setFit(fit: 'contain' | 'cover'): void }
-interface MountOptions { fit?: 'contain' | 'cover'; fps?: number; interactive?: boolean }
+export interface PreviewQualityState { antiAliasing: string; particles: string; postProcessing: 'off' | 'low' | 'medium' | 'high'; fps: number; running: boolean }
+export interface LivePreviewAdapter { mount(container: HTMLElement, descriptor: PreviewDescriptor, options?: MountOptions): Promise<void>; unmount(): Promise<void>; pause(): void; resume(): void; setVolume(volume: number): void; setFit(fit: 'contain' | 'cover'): void; getQualityState(): PreviewQualityState | null }
+export interface MountOptions { fit?: 'contain' | 'cover'; fps?: number; interactive?: boolean; autoQuality?: boolean }
 export class WebWallGlAdapter implements LivePreviewAdapter {
   private instance: SceneInstance | null = null;
   private pointerCleanup: (() => void) | null = null;
   async mount(container: HTMLElement, descriptor: PreviewDescriptor, mountOptions: MountOptions = {}) {
     await this.unmount(); if (!descriptor.resourceBaseUrl) throw new Error('缺少本地资源地址');
-    const options: WebWallGlMountOptions = { source: httpSource(descriptor.resourceBaseUrl), fit: mountOptions.fit || 'contain', scripts: descriptor.type === 'scene', fps: mountOptions.fps || 45, autoQuality: true, webSandbox: 'legacy' };
+    const options: WebWallGlMountOptions = { source: httpSource(descriptor.resourceBaseUrl), fit: mountOptions.fit || 'contain', scripts: descriptor.type === 'scene', fps: mountOptions.fps || 45, autoQuality: mountOptions.autoQuality !== false, webSandbox: 'legacy' };
     const instance = await mount(container, options);
     this.instance = instance;
     if (descriptor.type === 'scene' && mountOptions.interactive !== false) this.bindPointer(container, instance);
@@ -68,4 +69,8 @@ export class WebWallGlAdapter implements LivePreviewAdapter {
   resume() { this.instance?.resume(); }
   setVolume(volume: number) { this.instance?.setVolume(volume); }
   setFit(fit: 'contain' | 'cover') { this.instance?.setFit(fit); }
+  getQualityState(): PreviewQualityState | null {
+    const instance = this.instance;
+    return instance ? { ...instance.getQuality(), fps: instance.stats.fps, running: instance.stats.running } : null;
+  }
 }

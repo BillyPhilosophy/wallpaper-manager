@@ -27,19 +27,10 @@ const BrowserCacheContext = createContext<BrowserCacheValue>({
 
 export function BrowserCacheProvider({ children }: { children: React.ReactNode }) {
   const supported = 'serviceWorker' in navigator && 'caches' in window && 'indexedDB' in window;
-  const [enabled, setEnabledState] = useState(() => {
-    try { return localStorage.getItem(storageKey) === 'true'; } catch { return false; }
-  });
+  const [enabled, setEnabledState] = useState(false);
   const [error, setError] = useState('');
   const [usage, setUsage] = useState<BrowserCacheUsage>(emptyUsage);
 
-  useEffect(() => {
-    const changed = (event: StorageEvent) => {
-      if (event.key === storageKey) setEnabledState(event.newValue === 'true');
-    };
-    window.addEventListener('storage', changed);
-    return () => window.removeEventListener('storage', changed);
-  }, []);
   useEffect(() => {
     try { localStorage.setItem(storageKey, String(enabled)); } catch { }
     if (!supported) return;

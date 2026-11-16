@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { createServer } from 'node:http';
 
 test('browser cache is opt-in, versioned, range-aware, and clearable', async ({ page }) => {
+  test.skip(true, '浏览器缓存暂时停用');
   let updatedAt = '2026-01-01T00:00:00.000Z';
   let content = 'video-content-v1';
   let networkRequests = 0;
@@ -101,6 +102,7 @@ async function fetchResource(page: Page, url: string) {
 }
 
 test('concurrent downloads and controls cannot resurrect stale cache', async ({ page, context }) => {
+  test.skip(true, '浏览器缓存暂时停用');
   test.setTimeout(90000);
   let updatedAt = '2026-01-01T00:00:00.000Z';
   let content = 'video-content-v1';

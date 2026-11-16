@@ -1,5 +1,5 @@
 import type { PreviewDescriptor } from '@wallpaper-manager/contracts';
-import { WebWallGlAdapter } from './features/live-preview/adapter';
+import { WebWallGlAdapter, type MountOptions } from './features/live-preview/adapter';
 import './preview.css';
 
 const host = document.getElementById('preview');
@@ -8,12 +8,44 @@ let generation = 0;
 let manuallyPaused = false;
 let audioEnabled = true;
 let audioVolume = 1;
+let currentDescriptor: PreviewDescriptor | null = null;
+let mountOptions: MountOptions = {};
+let qualityTimer = 0;
 
 function syncPlayback() {
   const inactive = manuallyPaused || document.hidden;
   engine?.setVolume(!inactive && audioEnabled ? Math.max(0, Math.min(1, audioVolume)) : 0);
   if (inactive) engine?.pause();
   else engine?.resume();
+}
+
+function reportQuality() {
+  const state = engine?.getQualityState();
+  if (state) window.parent.postMessage({ type: 'wm-preview-quality', ...state }, '*');
+}
+
+function startQualityReporting() {
+  window.clearInterval(qualityTimer);
+  reportQuality();
+  qualityTimer = window.setInterval(reportQuality, 1000);
+}
+
+async function mountCurrent() {
+  if (!host || !currentDescriptor) return;
+  const descriptor = currentDescriptor;
+  const options = mountOptions;
+  const current = ++generation;
+  window.clearInterval(qualityTimer);
+  if (engine) await engine.unmount();
+  const next = new WebWallGlAdapter();
+  engine = next;
+  try {
+    await next.mount(host, descriptor, options);
+    if (current !== generation) await next.unmount();
+    else { syncPlayback(); startQualityReporting(); }
+  } catch {
+    if (current === generation) window.parent.postMessage({ type: 'wm-preview-error', message: '壁纸渲染失败' }, '*');
+  }
 }
 
 window.addEventListener('message', (event) => {
@@ -30,24 +62,23 @@ window.addEventListener('message', (event) => {
     return;
   }
   if (event.data?.type === 'wm-preview-fit') {
-    if (event.data.fit === 'contain' || event.data.fit === 'cover') engine?.setFit(event.data.fit);
+    if (event.data.fit === 'contain' || event.data.fit === 'cover') {
+      mountOptions = { ...mountOptions, fit: event.data.fit };
+      engine?.setFit(event.data.fit);
+    }
+    return;
+  }
+  if (event.data?.type === 'wm-preview-auto-quality') {
+    const enabled = Boolean(event.data.enabled);
+    if ((mountOptions.autoQuality !== false) === enabled) return;
+    mountOptions = { ...mountOptions, autoQuality: enabled };
+    void mountCurrent();
     return;
   }
   if (event.data?.type !== 'wm-preview-mount') return;
-  const descriptor = event.data.descriptor as PreviewDescriptor;
-  const current = ++generation;
-  void (async () => {
-    if (engine) await engine.unmount();
-    const next = new WebWallGlAdapter();
-    engine = next;
-    try {
-      await next.mount(host, descriptor, event.data.options);
-      if (current !== generation) await next.unmount();
-      else syncPlayback();
-    } catch {
-      if (current === generation) window.parent.postMessage({ type: 'wm-preview-error', message: '壁纸渲染失败' }, '*');
-    }
-  })();
+  currentDescriptor = event.data.descriptor as PreviewDescriptor;
+  mountOptions = event.data.options || {};
+  void mountCurrent();
 });
 document.addEventListener('visibilitychange', syncPlayback);
-window.addEventListener('pagehide', () => { generation++; if (engine) void engine.unmount(); });
+window.addEventListener('pagehide', () => { window.clearInterval(qualityTimer); generation++; if (engine) void engine.unmount(); });

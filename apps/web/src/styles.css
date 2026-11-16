@@ -590,3 +590,8 @@ pre { max-height: 300px; overflow: auto; padding: 14px; border-radius: 10px; bac
 @media (max-width: 1000px) and (max-aspect-ratio: 1/1) {
   .detail-preview.preview-landscape:fullscreen, .detail-preview.preview-landscape.preview-immersive { position: fixed; inset: auto; top: 50%; left: 50%; width: 100vh; height: 100vw; padding: 0; transform: translate(-50%, -50%) rotate(90deg); }
 }
+
+.preview-quality-status { flex: none; padding: 0 6px; color: rgba(255,255,255,.66); font-size: 11px; white-space: nowrap; }
+@media (max-width: 700px) {
+  .preview-quality-status { padding: 0 3px; font-size: 10px; }
+}

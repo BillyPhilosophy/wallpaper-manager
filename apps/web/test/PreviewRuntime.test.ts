@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, waitFor } from '@testing-library/react';
 import type { PreviewDescriptor } from '@wallpaper-manager/contracts';
 
-const engine = vi.hoisted(() => ({ mount: vi.fn(), unmount: vi.fn(), pause: vi.fn(), resume: vi.fn(), setVolume: vi.fn(), setFit: vi.fn() }));
+const engine = vi.hoisted(() => ({ mount: vi.fn(), unmount: vi.fn(), pause: vi.fn(), resume: vi.fn(), setVolume: vi.fn(), setFit: vi.fn(), getQualityState: vi.fn(() => ({ antiAliasing: 'off', particles: 'high', postProcessing: 'high', fps: 45, running: true })) }));
 vi.mock('../src/features/live-preview/adapter', () => ({
   WebWallGlAdapter: class {
     mount = engine.mount;
@@ -12,6 +12,7 @@ vi.mock('../src/features/live-preview/adapter', () => ({
     resume = engine.resume;
     setVolume = engine.setVolume;
     setFit = engine.setFit;
+    getQualityState = engine.getQualityState;
   },
 }));
 
@@ -50,5 +51,8 @@ describe('preview runtime audio', () => {
     expect(engine.setVolume).toHaveBeenLastCalledWith(0.5);
     message({ type: 'wm-preview-fit', fit: 'cover' });
     expect(engine.setFit).toHaveBeenCalledWith('cover');
+    message({ type: 'wm-preview-auto-quality', enabled: false });
+    await waitFor(() => expect(engine.mount).toHaveBeenCalledTimes(2));
+    expect(engine.mount.mock.calls[1][2]).toMatchObject({ fit: 'cover', autoQuality: false });
   });
 });

@@ -196,6 +196,8 @@ test('downloaded video supports local playback and fullscreen preview', async ({
   await expect(player).toHaveAttribute('src', '/api/wallpapers/123/resources/video.mp4');
   await page.getByRole('button', { name: '全屏预览', exact: true }).click();
   await expect(page.getByRole('button', { name: '退出全屏', exact: true })).toBeVisible();
+  await expect(page.getByText('原始画质', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /自动画质/ })).toHaveCount(0);
   expect(await page.evaluate(() => Boolean(document.fullscreenElement || document.querySelector('.preview-immersive')))).toBe(true);
   await page.getByRole('button', { name: '暂停', exact: true }).click();
   await expect(page.getByRole('button', { name: '继续播放', exact: true })).toBeVisible();

@@ -5,7 +5,7 @@ import { api, post, statusLabel, typeLabel } from '../api';
 import { useRemote } from '../hooks';
 import { OfficialPreview } from '../components/OfficialPreview';
 import { FavoriteButton } from '../components/FavoriteButton';
-import { LivePreview } from '../features/live-preview/LivePreview';
+import { LivePreview, type PreviewQualityState } from '../features/live-preview/LivePreview';
 import { useAppearance } from '../features/appearance/AppearanceContext';
 import { Icon } from '../components/Icon';
 import { WorkshopStats } from '../components/WorkshopStats';
@@ -22,6 +22,7 @@ export function DetailPage() {
   const [paused, setPaused] = useState(false);
   const [volume, setVolume] = useState(1);
   const [fit, setFit] = useState<'contain' | 'cover'>('contain');
+  const [quality, setQuality] = useState<PreviewQualityState | null>(null);
   const { settings, update: updateAppearance } = useAppearance();
   const remote = useRemote<WorkshopItem>(() => api(`/workshop/items/${workshopId}`), [workshopId]);
   const local = useRemote<Wallpaper>(() => api(`/wallpapers/${workshopId}`), [workshopId]);
@@ -98,7 +99,7 @@ export function DetailPage() {
     <Link className="back-link" to="..">← 返回壁纸库</Link>
     <div className="detail-layout">
       <div className={`detail-preview${immersive ? ' preview-immersive' : ''}${landscape ? ' preview-landscape' : ''}`} ref={previewRef} onPointerMove={showControls} onPointerDown={showControls} onFocusCapture={showControls}>
-        {live && descriptor.data && downloaded ? <LivePreview descriptor={descriptor.data} paused={paused} audioEnabled={settings.audioEnabled} volume={volume} fit={fit} videoControls={!expanded} cacheVersion={wallpaper?.updatedAt || ''}/> : <OfficialPreview url={wallpaper?.officialPreviewUrl || item?.officialPreviewUrl || null} title={title}/>}
+        {live && descriptor.data && downloaded ? <LivePreview descriptor={descriptor.data} paused={paused} audioEnabled={settings.audioEnabled} volume={volume} fit={fit} videoControls={!expanded} autoQuality={settings.autoQuality} onQualityChange={setQuality} cacheVersion={wallpaper?.updatedAt || ''}/> : <OfficialPreview url={wallpaper?.officialPreviewUrl || item?.officialPreviewUrl || null} title={title}/>}
         {live && downloaded && !expanded && <><button type="button" className="preview-fullscreen" aria-pressed={expanded} onClick={() => void toggleFullscreen()}>全屏预览</button><button type="button" className="preview-landscape-entry" onClick={() => void toggleLandscape()}>横屏预览</button></>}
         {live && downloaded && expanded && <>
           <div className={`preview-controls${controlsVisible ? '' : ' is-hidden'}`} role="toolbar" aria-label="预览控制" inert={!controlsVisible}>
@@ -106,6 +107,10 @@ export function DetailPage() {
             <button type="button" aria-pressed={!settings.audioEnabled} onClick={() => { updateAppearance({ audioEnabled: !settings.audioEnabled }); showControls(); }}>{settings.audioEnabled ? '静音' : '取消静音'}</button>
             <label className="preview-volume"><span>音量</span><input aria-label="预览音量" type="range" min="0" max="100" step="5" value={Math.round(volume * 100)} disabled={!settings.audioEnabled} onChange={(event) => { setVolume(Number(event.target.value) / 100); showControls(); }}/></label>
             <button type="button" onClick={() => { setFit((value) => value === 'contain' ? 'cover' : 'contain'); showControls(); }}>{fit === 'contain' ? '铺满' : '适应'}</button>
+            {descriptor.data?.mode === 'local-video' ? <span className="preview-quality-status">原始画质</span> : <>
+              <span className="preview-quality-status" title={quality ? `抗锯齿 ${quality.antiAliasing} · 粒子 ${quality.particles} · 后处理 ${quality.postProcessing}` : undefined}>{quality ? `${{ high: '高画质', medium: '中画质', low: '低画质', off: '效果关闭' }[quality.postProcessing]} · ${quality.running ? `${Math.round(quality.fps)} FPS` : '已暂停'}` : '画质读取中'}</span>
+              <button type="button" aria-pressed={settings.autoQuality} onClick={() => { setQuality(null); updateAppearance({ autoQuality: !settings.autoQuality }); showControls(); }}>自动画质 {settings.autoQuality ? '开' : '关'}</button>
+            </>}
             <button type="button" onClick={exitExpanded}>退出全屏</button>
           </div>
           {!controlsVisible && <button type="button" className="preview-controls-toggle" onClick={showControls}>预览操作</button>}

@@ -19,6 +19,7 @@ describe('AppearanceContext audio', () => {
     const button = view.getByRole('button');
     expect(button.textContent).toBe('true');
     expect(JSON.parse(localStorage.getItem('wallpaper-appearance-v1') || '{}').audioEnabled).toBe(true);
+    expect(JSON.parse(localStorage.getItem('wallpaper-appearance-v1') || '{}').autoQuality).toBe(true);
     fireEvent.click(button);
     expect(button.textContent).toBe('false');
     expect(JSON.parse(localStorage.getItem('wallpaper-appearance-v1') || '{}').audioEnabled).toBe(false);

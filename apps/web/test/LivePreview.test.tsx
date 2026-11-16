@@ -62,6 +62,14 @@ describe('LivePreview', () => {
     expect(play).toHaveBeenCalledTimes(2);
   });
 
+  it('forwards WebWallGL quality state to the preview controls', () => {
+    const onQualityChange = vi.fn();
+    const view = render(<LivePreview descriptor={descriptor} onQualityChange={onQualityChange}/>);
+    const frame = view.getByLabelText('WebWallGL 实时预览') as HTMLIFrameElement;
+    fireEvent(window, new MessageEvent('message', { source: frame.contentWindow, data: { type: 'wm-preview-quality', antiAliasing: 'off', particles: 'high', postProcessing: 'low', fps: 18, running: true } }));
+    expect(onQualityChange).toHaveBeenCalledWith(expect.objectContaining({ postProcessing: 'low', fps: 18 }));
+  });
+
   it('keeps video muted while audio is disabled even when visible', () => {
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
