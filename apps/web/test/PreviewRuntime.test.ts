@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, waitFor } from '@testing-library/react';
 import type { PreviewDescriptor } from '@wallpaper-manager/contracts';
 
-const engine = vi.hoisted(() => ({ mount: vi.fn(), unmount: vi.fn(), pause: vi.fn(), resume: vi.fn(), setVolume: vi.fn() }));
+const engine = vi.hoisted(() => ({ mount: vi.fn(), unmount: vi.fn(), pause: vi.fn(), resume: vi.fn(), setVolume: vi.fn(), setFit: vi.fn() }));
 vi.mock('../src/features/live-preview/adapter', () => ({
   WebWallGlAdapter: class {
     mount = engine.mount;
@@ -11,6 +11,7 @@ vi.mock('../src/features/live-preview/adapter', () => ({
     pause = engine.pause;
     resume = engine.resume;
     setVolume = engine.setVolume;
+    setFit = engine.setFit;
   },
 }));
 
@@ -45,5 +46,9 @@ describe('preview runtime audio', () => {
     expect(engine.setVolume).toHaveBeenLastCalledWith(0);
     message({ type: 'wm-preview-pause', paused: false });
     expect(engine.setVolume).toHaveBeenLastCalledWith(1);
+    message({ type: 'wm-preview-audio', enabled: true, volume: 0.5 });
+    expect(engine.setVolume).toHaveBeenLastCalledWith(0.5);
+    message({ type: 'wm-preview-fit', fit: 'cover' });
+    expect(engine.setFit).toHaveBeenCalledWith('cover');
   });
 });

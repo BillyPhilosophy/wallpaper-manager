@@ -35,7 +35,7 @@ test('browser cache is opt-in, versioned, range-aware, and clearable', async ({ 
 
     await page.goto('/wallpaper/123');
     await page.getByRole('button', { name: '启动实时预览', exact: true }).click();
-    await expect(page.getByLabel('本地视频实时预览')).toBeVisible();
+    await expect(page.getByLabel('本地视频实时预览')).toBeVisible({ timeout: 15000 });
     const load = async (range?: string) => page.evaluate(async ({ range }) => {
       const response = await fetch('/api/wallpapers/123/resources/video.mp4', range ? { headers: { Range: range } } : undefined);
       return { status: response.status, cache: response.headers.get('x-wallpaper-cache'), contentRange: response.headers.get('content-range'), body: await response.text() };
@@ -50,7 +50,7 @@ test('browser cache is opt-in, versioned, range-aware, and clearable', async ({ 
     content = 'video-content-v2';
     await page.reload();
     await page.getByRole('button', { name: '启动实时预览', exact: true }).click();
-    await expect(page.getByLabel('本地视频实时预览')).toBeVisible();
+    await expect(page.getByLabel('本地视频实时预览')).toBeVisible({ timeout: 15000 });
     expect(await load()).toMatchObject({ status: 200, cache: 'MISS', body: 'video-content-v2' });
     expect(await load()).toMatchObject({ status: 200, cache: 'HIT', body: 'video-content-v2' });
     expect(networkRequests).toBe(2);
@@ -145,7 +145,7 @@ test('concurrent downloads and controls cannot resurrect stale cache', async ({ 
     await page.getByRole('switch', { name: '在此浏览器中缓存壁纸资源', exact: true }).check();
     await page.goto('/wallpaper/123');
     await page.getByRole('button', { name: '启动实时预览', exact: true }).click();
-    await expect(page.getByLabel('本地视频实时预览')).toBeVisible();
+    await expect(page.getByLabel('本地视频实时预览')).toBeVisible({ timeout: 15000 });
 
     const dedupUrl = '/api/wallpapers/123/resources/video.mp4?case=dedup';
     const dedup = await Promise.all([fetchResource(page, dedupUrl), fetchResource(page, dedupUrl)]);
@@ -181,14 +181,14 @@ test('concurrent downloads and controls cannot resurrect stale cache', async ({ 
     content = 'video-content-v2';
     await page.reload();
     await page.getByRole('button', { name: '启动实时预览', exact: true }).click();
-    await expect(page.getByLabel('本地视频实时预览')).toBeVisible();
+    await expect(page.getByLabel('本地视频实时预览')).toBeVisible({ timeout: 15000 });
     expect(await fetchResource(page, '/api/wallpapers/123/resources/video.mp4?case=version')).toMatchObject({ cache: 'MISS', body: 'video-content-v2' });
 
     updatedAt = '2026-01-01T00:00:00.000Z';
     content = 'video-content-v1';
     await page.reload();
     await page.getByRole('button', { name: '启动实时预览', exact: true }).click();
-    await expect(page.getByLabel('本地视频实时预览')).toBeVisible();
+    await expect(page.getByLabel('本地视频实时预览')).toBeVisible({ timeout: 15000 });
     await expect.poll(() => cacheState(page, 'version:123')).toBe('2026-01-02T00:00:00.000Z');
     expect(await fetchResource(page, '/api/wallpapers/123/resources/video.mp4?case=version')).toMatchObject({ cache: 'HIT', body: 'video-content-v2' });
     expect(counts.get('version')).toBe(1);

@@ -560,3 +560,33 @@ pre { max-height: 300px; overflow: auto; padding: 14px; border-radius: 10px; bac
 @media (prefers-reduced-transparency: reduce) {
   .sidebar, .mobile-header, .mobile-tab-bar, .search-bar, .menu-trigger, .filter-options, .wallpaper-card, .settings-card, .job, .detail-copy { background: var(--glass-strong); backdrop-filter: none; -webkit-backdrop-filter: none; }
 }
+
+.app-shell { transition: opacity .25s ease; }
+.app-shell.is-ui-hidden { opacity: 0; pointer-events: none; }
+.ui-visibility-toggle { position: fixed; right: 20px; bottom: 20px; z-index: 900; display: inline-flex; align-items: center; gap: 7px; padding: 10px 14px; border: 1px solid rgba(255,255,255,.16); border-radius: 999px; background: rgba(10,13,20,.68); color: #eef0f7; font-size: 12px; box-shadow: 0 8px 28px rgba(0,0,0,.2); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.ui-visibility-toggle.is-hidden { background: rgba(10,13,20,.42); }
+@media (max-width: 700px) {
+  .ui-visibility-toggle:not(.is-hidden) { bottom: calc(84px + env(safe-area-inset-bottom)); }
+}
+
+.preview-landscape-entry { display: none; position: absolute; top: 12px; right: 110px; z-index: 2; padding: 8px 14px; border: 1px solid rgba(255,255,255,.18); background: rgba(10,13,20,.64); color: #eef0f7; font-size: 12px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+.preview-controls { position: absolute; left: 50%; bottom: 22px; z-index: 3; display: flex; align-items: center; gap: 6px; max-width: calc(100% - 32px); padding: 7px; overflow-x: auto; border: 1px solid rgba(255,255,255,.16); border-radius: 16px; background: rgba(10,13,20,.72); box-shadow: 0 10px 36px rgba(0,0,0,.28); transform: translateX(-50%); transition: opacity .2s, transform .2s; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+.preview-controls button { flex: none; padding: 8px 12px; border: 0; border-radius: 10px; background: transparent; color: #eef0f7; font-size: 12px; box-shadow: none; white-space: nowrap; }
+.preview-controls button:hover, .preview-controls button[aria-pressed="true"] { background: rgba(255,255,255,.12); }
+.preview-controls.is-hidden { opacity: 0; pointer-events: none; transform: translate(-50%, 8px); }
+.preview-controls-toggle { position: absolute; right: 16px; bottom: 16px; z-index: 3; padding: 8px 12px; border: 1px solid rgba(255,255,255,.12); border-radius: 999px; background: rgba(10,13,20,.36); color: rgba(255,255,255,.7); font-size: 11px; }
+.preview-volume { display: flex; align-items: center; gap: 7px; padding: 0 7px; color: rgba(255,255,255,.72); font-size: 11px; white-space: nowrap; }
+.preview-volume input { width: 88px; min-height: 0; accent-color: var(--accent); }
+@media (max-width: 1000px) {
+  .preview-landscape-entry { display: block; }
+}
+@media (max-width: 700px) {
+  .preview-controls { bottom: 14px; max-width: calc(100% - 20px); }
+  .preview-controls button { padding: 7px 9px; font-size: 11px; }
+  .preview-volume > span { display: none; }
+  .preview-volume { padding: 0 3px; }
+  .preview-volume input { width: 64px; }
+}
+@media (max-width: 1000px) and (max-aspect-ratio: 1/1) {
+  .detail-preview.preview-landscape:fullscreen, .detail-preview.preview-landscape.preview-immersive { position: fixed; inset: auto; top: 50%; left: 50%; width: 100vh; height: 100vw; padding: 0; transform: translate(-50%, -50%) rotate(90deg); }
+}

@@ -7,10 +7,11 @@ let engine: WebWallGlAdapter | null = null;
 let generation = 0;
 let manuallyPaused = false;
 let audioEnabled = true;
+let audioVolume = 1;
 
 function syncPlayback() {
   const inactive = manuallyPaused || document.hidden;
-  engine?.setVolume(!inactive && audioEnabled ? 1 : 0);
+  engine?.setVolume(!inactive && audioEnabled ? Math.max(0, Math.min(1, audioVolume)) : 0);
   if (inactive) engine?.pause();
   else engine?.resume();
 }
@@ -24,7 +25,12 @@ window.addEventListener('message', (event) => {
   }
   if (event.data?.type === 'wm-preview-audio') {
     audioEnabled = Boolean(event.data.enabled);
+    if (typeof event.data.volume === 'number') audioVolume = event.data.volume;
     syncPlayback();
+    return;
+  }
+  if (event.data?.type === 'wm-preview-fit') {
+    if (event.data.fit === 'contain' || event.data.fit === 'cover') engine?.setFit(event.data.fit);
     return;
   }
   if (event.data?.type !== 'wm-preview-mount') return;

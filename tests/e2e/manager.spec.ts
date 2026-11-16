@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+test.use({ serviceWorkers: 'block' });
 const item = { workshopId: '123', title: 'Aurora Landscape', description: 'Fixture scene', type: 'scene', officialPreviewUrl: null, previewContentType: null, metadataJson: { title: 'Aurora Landscape', subscriptions: 12345, favorited: 678 }, localStatus: 'not_downloaded', favorited: false };
 test.beforeEach(async ({ page }) => {
   await page.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, (route) => route.abort());
@@ -196,8 +197,23 @@ test('downloaded video supports local playback and fullscreen preview', async ({
   await page.getByRole('button', { name: '全屏预览', exact: true }).click();
   await expect(page.getByRole('button', { name: '退出全屏', exact: true })).toBeVisible();
   expect(await page.evaluate(() => Boolean(document.fullscreenElement || document.querySelector('.preview-immersive')))).toBe(true);
+  await page.getByRole('button', { name: '暂停', exact: true }).click();
+  await expect(page.getByRole('button', { name: '继续播放', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '继续播放', exact: true }).click();
+  await page.getByRole('button', { name: '静音', exact: true }).click();
+  await expect.poll(() => player.evaluate((element) => (element as HTMLVideoElement).muted)).toBe(true);
+  await page.getByRole('button', { name: '取消静音', exact: true }).click();
+  await page.getByRole('button', { name: '铺满', exact: true }).click();
+  await expect(player).toHaveCSS('object-fit', 'cover');
   await page.getByRole('button', { name: '退出全屏', exact: true }).click();
   await expect(page.getByRole('button', { name: '全屏预览', exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: '横屏预览', exact: true }).click();
+  await expect(page.locator('.detail-preview')).toHaveClass(/preview-landscape/);
+  const landscapeSize = await page.locator('.detail-preview').evaluate((element) => ({ width: parseFloat(getComputedStyle(element).width), height: parseFloat(getComputedStyle(element).height), transform: getComputedStyle(element).transform }));
+  expect(landscapeSize.width).toBeGreaterThan(landscapeSize.height);
+  expect(landscapeSize.transform).not.toBe('none');
+  await page.getByRole('button', { name: '退出全屏', exact: true }).click();
 });
 test('downloaded unsupported type shows official fallback', async ({ page }) => {
   const local = { ...item, localStatus: 'downloaded', status: 'downloaded', metadataJson: {}, localRelativePath: '123', fileSizeBytes: '1024', lastErrorCode: null, lastErrorMessage: null, downloadedAt: new Date().toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), type: 'application' };
@@ -233,6 +249,11 @@ test('appearance settings persist theme and a downloaded dynamic background', as
   await page.route('**/api/wallpapers?**', (route) => route.fulfill({ json: { items: [local], page: 1, pageSize: 100, total: 1 } }));
   await page.route('**/api/wallpapers/123/preview-descriptor', (route) => route.fulfill({ json: { workshopId: '123', mode: 'webwallgl', type: 'scene', resourceBaseUrl: '/api/wallpapers/123/resources', entry: 'scene.pkg', fallbackPreviewUrl: null, degraded: false, message: null } }));
   await page.route('**/api/wallpapers/123', (route) => route.fulfill({ json: local }));
+  await page.route('**/api/wallpapers/123/resources/project.json', (route) => route.fulfill({ json: { type: 'scene', file: 'scene.pkg' } }));
+  await page.route('**/api/wallpapers/123/resources/scene.pkg', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 10000));
+    await route.fulfill({ body: 'pending-scene' });
+  });
   await page.route('**/api/system/capabilities', (route) => route.fulfill({ json: { workerReady: true, steamAuthenticated: false, steamApiKeyConfigured: true, livePreviewTypes: ['scene', 'web'], webwallglVersion: '3.0.2' } }));
   await page.route('**/api/steam/auth/status', (route) => route.fulfill({ json: { status: 'auth_required', message: null, accountName: null, steamId: null, updatedAt: new Date().toISOString() } }));
   await page.route('**/api/steam/auth/qr', (route) => route.fulfill({ json: { status: 'auth_required', qrCode: null, updatedAt: null } }));
@@ -248,6 +269,10 @@ test('appearance settings persist theme and a downloaded dynamic background', as
   expect(settings).toMatchObject({ theme: 'light', backgroundMode: 'dynamic', backgroundId: '123' });
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await expect(page.locator('.dynamic-background iframe')).toHaveAttribute('sandbox', 'allow-scripts allow-same-origin');
+  await page.getByRole('button', { name: '欣赏背景', exact: true }).click();
+  await expect(page.locator('.app-shell')).toHaveClass(/is-ui-hidden/);
+  await page.getByRole('button', { name: '显示界面', exact: true }).click();
+  await expect(page.locator('.app-shell')).not.toHaveClass(/is-ui-hidden/);
 });
 
 test('WebWallGL web wallpapers load resources from the site origin', async ({ page }) => {

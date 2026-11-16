@@ -13,7 +13,7 @@ let instance: SceneInstance;
 describe('WebWallGlAdapter', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    instance = { pushPointer: vi.fn(), pointerLeave: vi.fn(), release: vi.fn(), destroy: vi.fn(), pause: vi.fn(), resume: vi.fn(), setVolume: vi.fn() } as unknown as SceneInstance;
+    instance = { pushPointer: vi.fn(), pointerLeave: vi.fn(), release: vi.fn(), destroy: vi.fn(), pause: vi.fn(), resume: vi.fn(), setVolume: vi.fn(), setFit: vi.fn() } as unknown as SceneInstance;
     vi.mocked(mount).mockResolvedValue(instance);
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { callback(0); return 0; });
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
@@ -57,6 +57,8 @@ describe('WebWallGlAdapter', () => {
     expect(instance.setVolume).toHaveBeenCalledWith(1);
     adapter.setVolume(0);
     expect(instance.setVolume).toHaveBeenCalledWith(0);
+    adapter.setFit('contain');
+    expect(instance.setFit).toHaveBeenCalledWith('contain');
     await adapter.unmount();
   });
 });

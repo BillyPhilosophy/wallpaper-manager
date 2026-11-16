@@ -17,7 +17,7 @@ describe('LivePreview', () => {
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts allow-same-origin allow-pointer-lock');
     expect(frame.getAttribute('src')).toBe('/preview.html');
     fireEvent.load(frame);
-    expect(post).toHaveBeenCalledWith({ type: 'wm-preview-audio', enabled: true }, '*');
+    expect(post).toHaveBeenCalledWith({ type: 'wm-preview-audio', enabled: true, volume: 1 }, '*');
     view.unmount();
   });
 
