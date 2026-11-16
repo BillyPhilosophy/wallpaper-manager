@@ -101,7 +101,7 @@ export function DetailPage() {
         {live && descriptor.data && downloaded ? <LivePreview descriptor={descriptor.data} paused={paused} audioEnabled={settings.audioEnabled} volume={volume} fit={fit} videoControls={!expanded} cacheVersion={wallpaper?.updatedAt || ''}/> : <OfficialPreview url={wallpaper?.officialPreviewUrl || item?.officialPreviewUrl || null} title={title}/>}
         {live && downloaded && !expanded && <><button type="button" className="preview-fullscreen" aria-pressed={expanded} onClick={() => void toggleFullscreen()}>全屏预览</button><button type="button" className="preview-landscape-entry" onClick={() => void toggleLandscape()}>横屏预览</button></>}
         {live && downloaded && expanded && <>
-          <div className={`preview-controls${controlsVisible ? '' : ' is-hidden'}`} role="toolbar" aria-label="预览控制" aria-hidden={!controlsVisible} inert={!controlsVisible}>
+          <div className={`preview-controls${controlsVisible ? '' : ' is-hidden'}`} role="toolbar" aria-label="预览控制" inert={!controlsVisible}>
             <button type="button" aria-pressed={paused} onClick={() => { setPaused((value) => !value); showControls(); }}>{paused ? '继续播放' : '暂停'}</button>
             <button type="button" aria-pressed={!settings.audioEnabled} onClick={() => { updateAppearance({ audioEnabled: !settings.audioEnabled }); showControls(); }}>{settings.audioEnabled ? '静音' : '取消静音'}</button>
             <label className="preview-volume"><span>音量</span><input aria-label="预览音量" type="range" min="0" max="100" step="5" value={Math.round(volume * 100)} disabled={!settings.audioEnabled} onChange={(event) => { setVolume(Number(event.target.value) / 100); showControls(); }}/></label>

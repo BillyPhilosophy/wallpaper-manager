@@ -32,7 +32,7 @@ export default function App() {
     const keyboard = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && uiHidden) { setUiHidden(false); return; }
       const target = event.target as HTMLElement | null;
-      if (event.key.toLowerCase() !== 'h' || target?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName || '')) return;
+      if (event.key?.toLowerCase() !== 'h' || target?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName || '')) return;
       if (backgroundAvailable) setUiHidden((value) => !value);
     };
     document.addEventListener('keydown', keyboard);

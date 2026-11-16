@@ -205,6 +205,9 @@ test('downloaded video supports local playback and fullscreen preview', async ({
   await page.getByRole('button', { name: '取消静音', exact: true }).click();
   await page.getByRole('button', { name: '铺满', exact: true }).click();
   await expect(player).toHaveCSS('object-fit', 'cover');
+  await expect(page.getByRole('button', { name: '预览操作', exact: true })).toBeVisible({ timeout: 12000 });
+  await expect(page.locator('.preview-controls')).not.toHaveAttribute('aria-hidden', 'true');
+  await page.getByRole('button', { name: '预览操作', exact: true }).click();
   await page.getByRole('button', { name: '退出全屏', exact: true }).click();
   await expect(page.getByRole('button', { name: '全屏预览', exact: true })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
@@ -245,6 +248,8 @@ test('mobile navigation includes favorites and sorting uses a bottom sheet', asy
 });
 
 test('appearance settings persist theme and a downloaded dynamic background', async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
   const local = { ...item, contentRating: 'everyone', subscribed: false, localStatus: 'downloaded', status: 'downloaded', localRelativePath: '123', fileSizeBytes: '1024', lastErrorCode: null, lastErrorMessage: null, downloadedAt: new Date().toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
   await page.route('**/api/wallpapers?**', (route) => route.fulfill({ json: { items: [local], page: 1, pageSize: 100, total: 1 } }));
   await page.route('**/api/wallpapers/123/preview-descriptor', (route) => route.fulfill({ json: { workshopId: '123', mode: 'webwallgl', type: 'scene', resourceBaseUrl: '/api/wallpapers/123/resources', entry: 'scene.pkg', fallbackPreviewUrl: null, degraded: false, message: null } }));
@@ -273,6 +278,8 @@ test('appearance settings persist theme and a downloaded dynamic background', as
   await expect(page.locator('.app-shell')).toHaveClass(/is-ui-hidden/);
   await page.getByRole('button', { name: '显示界面', exact: true }).click();
   await expect(page.locator('.app-shell')).not.toHaveClass(/is-ui-hidden/);
+  await page.evaluate(() => document.dispatchEvent(new Event('keydown')));
+  expect(pageErrors).toEqual([]);
 });
 
 test('WebWallGL web wallpapers load resources from the site origin', async ({ page }) => {
