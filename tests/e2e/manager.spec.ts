@@ -232,6 +232,7 @@ test('appearance settings persist theme and a downloaded dynamic background', as
   const local = { ...item, contentRating: 'everyone', subscribed: false, localStatus: 'downloaded', status: 'downloaded', localRelativePath: '123', fileSizeBytes: '1024', lastErrorCode: null, lastErrorMessage: null, downloadedAt: new Date().toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
   await page.route('**/api/wallpapers?**', (route) => route.fulfill({ json: { items: [local], page: 1, pageSize: 100, total: 1 } }));
   await page.route('**/api/wallpapers/123/preview-descriptor', (route) => route.fulfill({ json: { workshopId: '123', mode: 'webwallgl', type: 'scene', resourceBaseUrl: '/api/wallpapers/123/resources', entry: 'scene.pkg', fallbackPreviewUrl: null, degraded: false, message: null } }));
+  await page.route('**/api/wallpapers/123', (route) => route.fulfill({ json: local }));
   await page.route('**/api/system/capabilities', (route) => route.fulfill({ json: { workerReady: true, steamAuthenticated: false, steamApiKeyConfigured: true, livePreviewTypes: ['scene', 'web'], webwallglVersion: '3.0.2' } }));
   await page.route('**/api/steam/auth/status', (route) => route.fulfill({ json: { status: 'auth_required', message: null, accountName: null, steamId: null, updatedAt: new Date().toISOString() } }));
   await page.route('**/api/steam/auth/qr', (route) => route.fulfill({ json: { status: 'auth_required', qrCode: null, updatedAt: null } }));

@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PreviewDescriptor } from '@wallpaper-manager/contracts';
 import { OfficialPreview } from '../../components/OfficialPreview';
+import { useBrowserCache } from '../browser-cache/BrowserCacheContext';
 
-export function LivePreview({ descriptor, background = false, paused = false, audioEnabled = true }: { descriptor: PreviewDescriptor; background?: boolean; paused?: boolean; audioEnabled?: boolean }) {
+export function LivePreview({ descriptor, background = false, paused = false, audioEnabled = true, cacheVersion = '' }: { descriptor: PreviewDescriptor; background?: boolean; paused?: boolean; audioEnabled?: boolean; cacheVersion?: string }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const video = useRef<HTMLVideoElement>(null);
   const resumeVideo = useRef(false);
+  const { enabled: cacheEnabled, prepare: prepareCache } = useBrowserCache();
+  const [cacheReady, setCacheReady] = useState(!cacheEnabled || !cacheVersion);
   const [error, setError] = useState('');
   const postDescriptor = () => {
     frame.current?.contentWindow?.postMessage({ type: 'wm-preview-mount', descriptor, options: background ? { fit: 'cover', fps: 30, interactive: false } : undefined }, '*');
@@ -16,6 +19,16 @@ export function LivePreview({ descriptor, background = false, paused = false, au
   const postAudio = () => {
     frame.current?.contentWindow?.postMessage({ type: 'wm-preview-audio', enabled: audioEnabled }, '*');
   };
+  useEffect(() => {
+    let active = true;
+    if (!cacheEnabled || !cacheVersion || descriptor.mode === 'official-preview') {
+      setCacheReady(true);
+    } else {
+      setCacheReady(false);
+      void prepareCache(descriptor.workshopId, cacheVersion).finally(() => { if (active) setCacheReady(true); });
+    }
+    return () => { active = false; };
+  }, [cacheEnabled, cacheVersion, descriptor.workshopId, descriptor.mode, prepareCache]);
   useEffect(() => {
     setError('');
     if (descriptor.mode === 'official-preview' || descriptor.mode === 'local-video') return;
@@ -64,6 +77,7 @@ export function LivePreview({ descriptor, background = false, paused = false, au
       window.removeEventListener('keydown', sync);
     };
   }, [background, paused, audioEnabled, descriptor.mode, descriptor.workshopId]);
+  if (!cacheReady && descriptor.mode !== 'official-preview') return background ? null : <div className="loading">正在准备浏览器缓存…</div>;
   if (descriptor.mode === 'official-preview' || error) {
     if (background) return null;
     return <div><OfficialPreview url={descriptor.fallbackPreviewUrl} title="官方预览" /><p className="notice">{error ? `实时预览已降级：${error}` : descriptor.message}</p></div>;

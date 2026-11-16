@@ -65,7 +65,7 @@ export function DetailPage() {
     <Link className="back-link" to="..">← 返回壁纸库</Link>
     <div className="detail-layout">
       <div className={`detail-preview${immersive ? ' preview-immersive' : ''}`} ref={previewRef}>
-        {live && descriptor.data && downloaded ? <LivePreview descriptor={descriptor.data} audioEnabled={settings.audioEnabled}/> : <OfficialPreview url={wallpaper?.officialPreviewUrl || item?.officialPreviewUrl || null} title={title}/>}
+        {live && descriptor.data && downloaded ? <LivePreview descriptor={descriptor.data} audioEnabled={settings.audioEnabled} cacheVersion={wallpaper?.updatedAt || ''}/> : <OfficialPreview url={wallpaper?.officialPreviewUrl || item?.officialPreviewUrl || null} title={title}/>}
         {live && downloaded && <button type="button" className="preview-fullscreen" aria-pressed={expanded} onClick={() => void toggleFullscreen()}>{expanded ? '退出全屏' : '全屏预览'}</button>}
       </div>
       <div className="detail-copy">
