@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WorkshopController } from '../src/workshop/workshop.controller';
 
 describe('Steam subscription synchronization', () => {
-  afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+  afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers(); });
 
   it('imports subscriptions without enqueueing downloads', async () => {
     vi.stubEnv('STEAM_WEB_API_KEY', 'test-key');
@@ -99,5 +99,28 @@ describe('Steam subscription synchronization', () => {
     const result = await new WorkshopController({ db } as any).detail('456');
     expect(db.wallpaper.upsert).not.toHaveBeenCalled();
     expect(result.favorited).toBe(true);
+  });
+
+  it('returns an author profile and public works with local state', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 1000);
+    vi.stubEnv('STEAM_WEB_API_KEY', 'test-key');
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ response: { total: 1, publishedfiledetails: [{ publishedfileid: '123', title: 'Author scene', creator: '76561197960265851', tags: [{ tag: 'Scene' }, { tag: 'Everyone' }] }] } })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ response: { players: [{ personaname: 'Author name', avatarfull: 'https://example.test/avatar.jpg', profileurl: 'https://steamcommunity.com/profiles/76561197960265851' }] } })));
+    vi.stubGlobal('fetch', fetchMock);
+    const db = {
+      wallpaper: { findMany: vi.fn().mockResolvedValue([{ workshopId: '123', status: 'downloaded', type: 'scene', contentRating: 'everyone', subscribed: true }]), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      favorite: { findMany: vi.fn().mockResolvedValue([{ workshopId: '123' }]) },
+    };
+    const result = await new WorkshopController({ db } as any).authorFiles('76561197960265851', '2', '20', 'scene', 'everyone');
+    const params = new URL(String(fetchMock.mock.calls[0][0])).searchParams;
+    expect(params.get('type')).toBe('public');
+    expect(params.get('page')).toBe('2');
+    expect(params.get('requiredtags[0]')).toBe('Scene');
+    expect(params.get('excludedtags[0]')).toBe('Questionable');
+    expect(params.get('excludedtags[1]')).toBe('Mature');
+    expect(result.author).toMatchObject({ name: 'Author name', avatarUrl: 'https://example.test/avatar.jpg' });
+    expect(result.items[0]).toMatchObject({ workshopId: '123', localStatus: 'downloaded', favorited: true });
   });
 });

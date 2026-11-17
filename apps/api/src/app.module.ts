@@ -6,5 +6,6 @@ import { WorkshopController } from './workshop/workshop.controller';
 import { FavoritesController } from './favorites/favorites.controller';
 import { SteamController } from './steam/steam.controller';
 import { SystemController } from './system/system.controller';
-@Module({ imports: [InfrastructureModule], controllers: [WallpapersController, WorkshopController, FavoritesController, SteamController, SystemController], providers: [{ provide: APP_FILTER, useClass: ApiExceptionFilter }] })
+import { GroupsController } from './groups/groups.controller';
+@Module({ imports: [InfrastructureModule], controllers: [WallpapersController, WorkshopController, FavoritesController, SteamController, SystemController, GroupsController], providers: [{ provide: APP_FILTER, useClass: ApiExceptionFilter }] })
 export class AppModule {}

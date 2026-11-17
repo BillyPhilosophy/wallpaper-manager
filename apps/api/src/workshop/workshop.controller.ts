@@ -76,6 +76,46 @@ export class WorkshopController {
     const favorited = !!(await this.infra.db.favorite.findUnique({ where: { workshopId: id } }));
     return item(detail, local ? { ...local, favorited } : { status: 'not_downloaded', type: 'unknown', contentRating: 'unrated', subscribed: false, favorited });
   }
+  @Get('authors/:steamId/files')
+  async authorFiles(@Param('steamId') steamId: string, @Query('page') pageValue = '1', @Query('pageSize') size = '20', @Query('type') type = '', @Query('rating') rating = '') {
+    if (!/^7656119\d{10}$/.test(steamId)) throw new BadRequestException({ code: 'BAD_REQUEST', message: '作者 SteamID64 格式无效' });
+    const key = process.env.STEAM_WEB_API_KEY;
+    if (!key) throw new ServiceUnavailableException({ code: 'STEAM_API_UNAVAILABLE', message: '未配置 Steam Web API Key' });
+    const pageSize = Math.min(Math.max(Number(size) || 20, 1), 50);
+    const page = Math.min(Math.max(Math.trunc(Number(pageValue)) || 1, 1), 1000);
+    const types = filterValues(type, Object.keys(SEARCH_TYPE_TAGS), '无效类型').map((value) => SEARCH_TYPE_TAGS[value as keyof typeof SEARCH_TYPE_TAGS]);
+    const ratings = filterValues(rating, Object.keys(SEARCH_RATING_TAGS), '无效内容分级').map((value) => SEARCH_RATING_TAGS[value as keyof typeof SEARCH_RATING_TAGS]);
+    const excludedRatings = rating ? Object.values(SEARCH_RATING_TAGS).filter((tag) => !ratings.includes(tag)) : [];
+    const params = new URLSearchParams({ key, steamid: steamId, appid: '431960', type: 'public', page: String(page), numperpage: String(pageSize), ids_only: 'false', return_metadata: 'true', return_short_description: 'true', return_tags: 'true' });
+    types.forEach((tag, index) => params.set(`requiredtags[${index}]`, tag));
+    excludedRatings.forEach((tag, index) => params.set(`excludedtags[${index}]`, tag));
+    const [body, author] = await Promise.all([
+      cached(`author-files:${params}`, () => steamFetch(this.infra.steamNetwork, `https://api.steampowered.com/IPublishedFileService/GetUserFiles/v1/?${params}`)),
+      cached(`author-profile:${steamId}`, async () => {
+        try {
+          const profileParams = new URLSearchParams({ key, steamids: steamId });
+          const profileBody = await steamFetch(this.infra.steamNetwork, `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?${profileParams}`);
+          const profile = profileBody.response?.players?.[0];
+          return { steamId, name: typeof profile?.personaname === 'string' ? profile.personaname : null, avatarUrl: typeof profile?.avatarfull === 'string' ? profile.avatarfull : null, profileUrl: typeof profile?.profileurl === 'string' ? profile.profileurl : `https://steamcommunity.com/profiles/${steamId}/workshopfiles/?appid=431960` };
+        } catch {
+          return { steamId, name: null, avatarUrl: null, profileUrl: `https://steamcommunity.com/profiles/${steamId}/workshopfiles/?appid=431960` };
+        }
+      }),
+    ]);
+    const details = body.response?.publishedfiledetails || [];
+    const ids = details.map((entry: any) => String(entry.publishedfileid));
+    const local = await this.infra.db.wallpaper.findMany({ where: { workshopId: { in: ids } } });
+    const states = new Map(local.map((entry) => [entry.workshopId, entry]));
+    const favs = await this.infra.db.favorite.findMany({ where: { workshopId: { in: ids } }, select: { workshopId: true } });
+    const favSet = new Set(favs.map((f) => f.workshopId));
+    const items = details.map((entry: any) => {
+      const workshopId = String(entry.publishedfileid);
+      const state = states.get(workshopId);
+      return item(entry, state ? { ...state, favorited: favSet.has(workshopId) } : (favSet.has(workshopId) ? { status: 'not_downloaded', type: 'unknown', contentRating: 'unrated', subscribed: false, favorited: true } : undefined));
+    });
+    await Promise.all(items.map((entry: WorkshopItem) => this.infra.db.wallpaper.updateMany({ where: { workshopId: entry.workshopId }, data: { title: entry.title, description: entry.description, officialPreviewUrl: entry.officialPreviewUrl, metadataJson: JSON.stringify(entry.metadataJson) } })));
+    return { author, items, page, pageSize, total: Number(body.response?.total || items.length) };
+  }
   @Get('subscriptions/sync')
   syncStatus() { return subscriptionSync; }
   @Post('subscriptions/sync')

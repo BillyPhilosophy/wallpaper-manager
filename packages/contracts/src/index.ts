@@ -18,7 +18,12 @@ export interface Wallpaper {
   officialPreviewUrl: string | null; metadataJson: unknown; localRelativePath: string | null;
   status: WallpaperStatus; fileSizeBytes: string | null; lastErrorCode: string | null;
   lastErrorMessage: string | null; downloadedAt: string | null; createdAt: string; updatedAt: string;
+  groupIds?: string[];
 }
+
+export interface WallpaperGroup { id: string; name: string; color: string; sortOrder: number; itemCount: number; updatedAt: string }
+export interface WallpaperGroupInput { name: string; color?: string }
+export interface WallpaperGroupAssignment { groupIds: string[] }
 export interface Favorite {
   workshopId: string; title: string; officialPreviewUrl: string | null;
   type: WallpaperType; contentRating: ContentRating; createdAt: string;
@@ -41,6 +46,8 @@ export interface WorkshopItem {
 }
 export interface Page<T> { items: T[]; page: number; pageSize: number; total: number }
 export interface WorkshopSearchResult { items: WorkshopItem[]; cursor: string | null; total: number }
+export interface WorkshopAuthor { steamId: string; name: string | null; avatarUrl: string | null; profileUrl: string }
+export interface AuthorWorksPage extends Page<WorkshopItem> { author: WorkshopAuthor }
 export interface PreviewDescriptor {
   workshopId: string; mode: 'webwallgl' | 'web-sandbox' | 'local-video' | 'official-preview';
   type: WallpaperType; resourceBaseUrl?: string; entry?: string;

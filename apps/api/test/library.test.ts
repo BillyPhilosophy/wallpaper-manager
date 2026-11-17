@@ -11,6 +11,14 @@ describe('wallpaper library filters', () => {
     expect(result).toEqual({ items: [], page: 2, pageSize: 24, total: 0 });
   });
 
+  it('filters wallpapers without any group assignment', async () => {
+    const wallpaper = { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) };
+    const favorite = { findMany: vi.fn().mockResolvedValue([]) };
+    await new WallpapersController({ db: { wallpaper, favorite } } as any).list('', '', '', 'downloaded', '', '1', '24', 'none');
+    expect(wallpaper.findMany).toHaveBeenCalledWith({ where: { status: 'downloaded', groupItems: { none: {} } }, orderBy: { updatedAt: 'desc' }, skip: 0, take: 24 });
+    expect(wallpaper.count).toHaveBeenCalledWith({ where: { status: 'downloaded', groupItems: { none: {} } } });
+  });
+
   it('annotates each item with favorited from a single batch query', async () => {
     const now = new Date();
     const rows = [

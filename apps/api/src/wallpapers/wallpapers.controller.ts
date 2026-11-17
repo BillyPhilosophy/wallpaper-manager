@@ -25,16 +25,19 @@ async function workerDownloadProgress(): Promise<Map<string, DownloadProgress>> 
 export class WallpapersController {
   constructor(private readonly infra: Infrastructure) {}
   @Get('wallpapers')
-  async list(@Query('q') q = '', @Query('type') type = '', @Query('rating') rating = '', @Query('status') status = '', @Query('subscribed') subscribed = '', @Query('page') pageValue = '1', @Query('pageSize') sizeValue = '24') {
+  async list(@Query('q') q = '', @Query('type') type = '', @Query('rating') rating = '', @Query('status') status = '', @Query('subscribed') subscribed = '', @Query('page') pageValue = '1', @Query('pageSize') sizeValue = '24', @Query('groupId') groupId = '') {
     const page = positive(pageValue, 1); const pageSize = Math.min(positive(sizeValue, 24), 100);
     const types = filterValues(type, WALLPAPER_TYPES, '无效类型'); const ratings = filterValues(rating, CONTENT_RATINGS, '无效内容分级');
     if (status && !WALLPAPER_STATUSES.includes(status as any)) throw new BadRequestException('无效状态');
     if (subscribed && !['true', 'false'].includes(subscribed)) throw new BadRequestException('无效订阅状态');
-    const where = { ...(q ? { OR: [{ title: { contains: q.slice(0, 100) } }, { workshopId: { contains: q.slice(0, 100) } }] } : {}), ...(type ? { type: { in: types } } : {}), ...(rating ? { contentRating: { in: ratings } } : {}), ...(status ? { status } : {}), ...(subscribed ? { subscribed: subscribed === 'true' } : {}) };
+    if (groupId && groupId !== 'none') safeJobId(groupId);
+    const groupWhere = groupId === 'none' ? { none: {} } : groupId ? { some: { groupId } } : undefined;
+    const where = { ...(q ? { OR: [{ title: { contains: q.slice(0, 100) } }, { workshopId: { contains: q.slice(0, 100) } }] } : {}), ...(type ? { type: { in: types } } : {}), ...(rating ? { contentRating: { in: ratings } } : {}), ...(status ? { status } : {}), ...(subscribed ? { subscribed: subscribed === 'true' } : {}), ...(groupWhere ? { groupItems: groupWhere } : {}) };
     const [items, total] = await Promise.all([this.infra.db.wallpaper.findMany({ where, orderBy: { updatedAt: 'desc' }, skip: (page - 1) * pageSize, take: pageSize }), this.infra.db.wallpaper.count({ where })]);
     const favs = items.length ? await this.infra.db.favorite.findMany({ where: { workshopId: { in: items.map((i) => i.workshopId) } }, select: { workshopId: true } }) : [];
     const favSet = new Set(favs.map((f) => f.workshopId));
-    return { items: items.map((i) => ({ ...serializeWallpaper(i), favorited: favSet.has(i.workshopId) })), page, pageSize, total };
+    const links = items.length && this.infra.db.wallpaperGroupItem ? await this.infra.db.wallpaperGroupItem.findMany({ where: { workshopId: { in: items.map((i) => i.workshopId) } }, select: { workshopId: true, groupId: true } }) : [];
+    return { items: items.map((i) => ({ ...serializeWallpaper(i), favorited: favSet.has(i.workshopId), groupIds: links.filter((link) => link.workshopId === i.workshopId).map((link) => link.groupId) })), page, pageSize, total };
   }
   @Get('wallpapers/:workshopId')
   async get(@Param('workshopId') id: string) { const wallpaper = await this.find(id); const favorited = !!(await this.infra.db.favorite.findUnique({ where: { workshopId: id } })); return { ...serializeWallpaper(wallpaper), favorited }; }

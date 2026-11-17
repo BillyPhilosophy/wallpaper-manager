@@ -25,8 +25,33 @@ model Wallpaper {
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   jobs              DownloadJob[]
+  groupItems        WallpaperGroupItem[]
 
   @@index([status, type])
+}
+
+model WallpaperGroup {
+  id             String               @id @default(uuid())
+  name           String
+  normalizedName String               @unique
+  color          String               @default("#4f8cff")
+  sortOrder      Int                  @default(0)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  items          WallpaperGroupItem[]
+}
+
+model WallpaperGroupItem {
+  groupId    String
+  workshopId String
+  sortOrder  Int            @default(0)
+  createdAt  DateTime       @default(now())
+  group      WallpaperGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  wallpaper  Wallpaper      @relation(fields: [workshopId], references: [workshopId], onDelete: Cascade)
+
+  @@id([groupId, workshopId])
+  @@index([workshopId])
+  @@index([groupId, sortOrder])
 }
 
 model DownloadJob {
