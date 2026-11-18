@@ -652,3 +652,14 @@ pre { max-height: 300px; overflow: auto; padding: 14px; border-radius: 10px; bac
   .group-manager-item button { grid-row: 2; }
   .bulk-group-bar select { flex: 1; min-width: 150px; }
 }
+
+.background-rotation-section { padding-top: 20px; border-top: 1px solid var(--line); }
+.rotation-controls { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.rotation-controls > label { display: grid; gap: 7px; min-width: 160px; color: var(--muted); font-size: 12px; }
+.rotation-controls select { min-height: 40px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--field); color: var(--text); }
+.rotation-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+@media (max-width: 700px) {
+  .rotation-controls { display: grid; grid-template-columns: 1fr 1fr; }
+  .rotation-controls > label { min-width: 0; }
+  .rotation-controls .segmented-control { grid-column: 1 / -1; justify-self: start; }
+}

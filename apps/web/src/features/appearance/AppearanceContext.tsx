@@ -10,6 +10,11 @@ export interface AppearanceSettings {
   dimming: number;
   audioEnabled: boolean;
   autoQuality: boolean;
+  rotationEnabled: boolean;
+  rotationGroupId: string | null;
+  rotationIntervalMinutes: number;
+  rotationOrder: 'sequence' | 'random';
+  rotationTrigger: 'interval' | 'videoEnd';
 }
 
 interface AppearanceValue {
@@ -19,7 +24,7 @@ interface AppearanceValue {
 }
 
 const storageKey = 'wallpaper-appearance-v1';
-const defaults: AppearanceSettings = { theme: 'dark', backgroundMode: 'off', backgroundId: null, dimming: 45, audioEnabled: true, autoQuality: true };
+const defaults: AppearanceSettings = { theme: 'dark', backgroundMode: 'off', backgroundId: null, dimming: 45, audioEnabled: true, autoQuality: true, rotationEnabled: false, rotationGroupId: null, rotationIntervalMinutes: 5, rotationOrder: 'sequence', rotationTrigger: 'interval' };
 const AppearanceContext = createContext<AppearanceValue | null>(null);
 
 function readSettings(): AppearanceSettings {
@@ -32,6 +37,11 @@ function readSettings(): AppearanceSettings {
       dimming: typeof value.dimming === 'number' ? Math.max(0, Math.min(80, value.dimming)) : defaults.dimming,
       audioEnabled: typeof value.audioEnabled === 'boolean' ? value.audioEnabled : defaults.audioEnabled,
       autoQuality: typeof value.autoQuality === 'boolean' ? value.autoQuality : defaults.autoQuality,
+      rotationEnabled: typeof value.rotationEnabled === 'boolean' ? value.rotationEnabled : defaults.rotationEnabled,
+      rotationGroupId: typeof value.rotationGroupId === 'string' && value.rotationGroupId ? value.rotationGroupId : defaults.rotationGroupId,
+      rotationIntervalMinutes: typeof value.rotationIntervalMinutes === 'number' && [1, 5, 15, 30, 60].includes(value.rotationIntervalMinutes) ? value.rotationIntervalMinutes : defaults.rotationIntervalMinutes,
+      rotationOrder: value.rotationOrder === 'random' ? 'random' : defaults.rotationOrder,
+      rotationTrigger: value.rotationTrigger === 'videoEnd' ? 'videoEnd' : defaults.rotationTrigger,
     };
   } catch {
     return defaults;

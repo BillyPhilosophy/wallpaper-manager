@@ -261,6 +261,7 @@ test('appearance settings persist theme and a downloaded dynamic background', as
     await new Promise((resolve) => setTimeout(resolve, 10000));
     await route.fulfill({ body: 'pending-scene' });
   });
+  await page.route('**/api/groups', (route) => route.fulfill({ json: { items: [{ id: '11111111-1111-4111-8111-111111111111', name: '轮播组', color: '#4f8cff', sortOrder: 0, itemCount: 2, updatedAt: new Date().toISOString() }] } }));
   await page.route('**/api/system/capabilities', (route) => route.fulfill({ json: { workerReady: true, steamAuthenticated: false, steamApiKeyConfigured: true, livePreviewTypes: ['scene', 'web'], webwallglVersion: '3.0.2' } }));
   await page.route('**/api/steam/auth/status', (route) => route.fulfill({ json: { status: 'auth_required', message: null, accountName: null, steamId: null, updatedAt: new Date().toISOString() } }));
   await page.route('**/api/steam/auth/qr', (route) => route.fulfill({ json: { status: 'auth_required', qrCode: null, updatedAt: null } }));
@@ -276,6 +277,13 @@ test('appearance settings persist theme and a downloaded dynamic background', as
   expect(settings).toMatchObject({ theme: 'light', backgroundMode: 'dynamic', backgroundId: '123' });
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await expect(page.locator('.dynamic-background iframe')).toHaveAttribute('sandbox', 'allow-scripts allow-same-origin');
+  await page.getByLabel('轮播分组', { exact: true }).selectOption('11111111-1111-4111-8111-111111111111');
+  await page.getByLabel('轮播间隔', { exact: true }).selectOption('15');
+  await page.getByRole('button', { name: '随机', exact: true }).click();
+  await page.getByRole('button', { name: '视频播完', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('wallpaper-appearance-v1') || '{}').rotationIntervalMinutes)).toBe(15);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('wallpaper-appearance-v1') || '{}').rotationOrder)).toBe('random');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('wallpaper-appearance-v1') || '{}').rotationTrigger)).toBe('videoEnd');
   await page.getByRole('button', { name: '欣赏背景', exact: true }).click();
   await expect(page.locator('.app-shell')).toHaveClass(/is-ui-hidden/);
   await page.getByRole('button', { name: '显示界面', exact: true }).click();

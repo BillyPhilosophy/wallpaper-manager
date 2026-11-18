@@ -5,7 +5,7 @@ import { useBrowserCache } from '../browser-cache/BrowserCacheContext';
 import type { PreviewQualityState } from './adapter';
 export type { PreviewQualityState } from './adapter';
 
-export function LivePreview({ descriptor, background = false, paused = false, audioEnabled = true, volume = 1, fit = 'contain', videoControls = true, autoQuality = true, onQualityChange, cacheVersion = '' }: { descriptor: PreviewDescriptor; background?: boolean; paused?: boolean; audioEnabled?: boolean; volume?: number; fit?: 'contain' | 'cover'; videoControls?: boolean; autoQuality?: boolean; onQualityChange?: (state: PreviewQualityState) => void; cacheVersion?: string }) {
+export function LivePreview({ descriptor, background = false, paused = false, audioEnabled = true, volume = 1, fit = 'contain', videoControls = true, autoQuality = true, backgroundLoop = true, onEnded, onQualityChange, cacheVersion = '' }: { descriptor: PreviewDescriptor; background?: boolean; paused?: boolean; audioEnabled?: boolean; volume?: number; fit?: 'contain' | 'cover'; videoControls?: boolean; autoQuality?: boolean; backgroundLoop?: boolean; onEnded?: () => void; onQualityChange?: (state: PreviewQualityState) => void; cacheVersion?: string }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const video = useRef<HTMLVideoElement>(null);
   const resumeVideo = useRef(false);
@@ -105,7 +105,7 @@ export function LivePreview({ descriptor, background = false, paused = false, au
   }
   if (descriptor.mode === 'local-video' && descriptor.resourceBaseUrl && descriptor.entry) {
     const source = `${descriptor.resourceBaseUrl.replace(/\/$/, '')}/${descriptor.entry.split('/').map(encodeURIComponent).join('/')}`;
-    return <video ref={video} className={`preview local-video${background ? ' background-renderer' : ''}`} style={{ objectFit: background ? 'cover' : fit }} src={source} controls={!background && videoControls} autoPlay={background && !paused && !document.hidden} muted={!audioEnabled || document.hidden} loop={background} playsInline preload={background ? 'metadata' : 'none'} aria-label={background ? undefined : '本地视频实时预览'} onError={() => setError('本地视频加载失败')}/>;
+    return <video ref={video} className={`preview local-video${background ? ' background-renderer' : ''}`} style={{ objectFit: background ? 'cover' : fit }} src={source} controls={!background && videoControls} autoPlay={background && !paused && !document.hidden} muted={!audioEnabled || document.hidden} loop={background && backgroundLoop} playsInline onEnded={onEnded} preload={background ? 'metadata' : 'none'} aria-label={background ? undefined : '本地视频实时预览'} onError={() => setError('本地视频加载失败')}/>;
   }
   return <iframe ref={frame} className={`live-preview live-preview-frame${background ? ' background-renderer' : ''}`} src="/preview.html" sandbox={background ? 'allow-scripts allow-same-origin' : 'allow-scripts allow-same-origin allow-pointer-lock'} aria-label={background ? undefined : 'WebWallGL 实时预览'} tabIndex={background ? -1 : undefined} onLoad={() => { postDescriptor(); postPaused(); postAudio(); postFit(); postAutoQuality(); }}/>;
 }

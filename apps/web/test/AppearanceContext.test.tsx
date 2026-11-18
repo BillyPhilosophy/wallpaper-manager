@@ -20,6 +20,8 @@ describe('AppearanceContext audio', () => {
     expect(button.textContent).toBe('true');
     expect(JSON.parse(localStorage.getItem('wallpaper-appearance-v1') || '{}').audioEnabled).toBe(true);
     expect(JSON.parse(localStorage.getItem('wallpaper-appearance-v1') || '{}').autoQuality).toBe(true);
+    expect(JSON.parse(localStorage.getItem('wallpaper-appearance-v1') || '{}').rotationEnabled).toBe(false);
+    expect(JSON.parse(localStorage.getItem('wallpaper-appearance-v1') || '{}').rotationTrigger).toBe('interval');
     fireEvent.click(button);
     expect(button.textContent).toBe('false');
     expect(JSON.parse(localStorage.getItem('wallpaper-appearance-v1') || '{}').audioEnabled).toBe(false);
