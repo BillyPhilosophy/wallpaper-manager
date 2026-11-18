@@ -86,7 +86,7 @@ export class WorkshopController {
     const types = filterValues(type, Object.keys(SEARCH_TYPE_TAGS), '无效类型').map((value) => SEARCH_TYPE_TAGS[value as keyof typeof SEARCH_TYPE_TAGS]);
     const ratings = filterValues(rating, Object.keys(SEARCH_RATING_TAGS), '无效内容分级').map((value) => SEARCH_RATING_TAGS[value as keyof typeof SEARCH_RATING_TAGS]);
     const excludedRatings = rating ? Object.values(SEARCH_RATING_TAGS).filter((tag) => !ratings.includes(tag)) : [];
-    const params = new URLSearchParams({ key, steamid: steamId, appid: '431960', type: 'public', page: String(page), numperpage: String(pageSize), ids_only: 'false', return_metadata: 'true', return_short_description: 'true', return_tags: 'true' });
+    const params = new URLSearchParams({ key, steamid: steamId, appid: '431960', type: 'myfiles', page: String(page), numperpage: String(pageSize), ids_only: 'false', return_metadata: 'true', return_short_description: 'true', return_tags: 'true' });
     types.forEach((tag, index) => params.set(`requiredtags[${index}]`, tag));
     excludedRatings.forEach((tag, index) => params.set(`excludedtags[${index}]`, tag));
     const [body, author] = await Promise.all([

@@ -51,7 +51,7 @@ export function AuthorPage() {
     <div className="author-summary">
       {data?.author.avatarUrl ? <img src={data.author.avatarUrl} alt="" className="author-avatar"/> : <span className="author-avatar-placeholder"><Icon name="monitor" size={28}/></span>}
       <div><p className="eyebrow">WORKSHOP AUTHOR</p><h1>{data?.author.name || '壁纸作者'}</h1><p>查看该作者发布的 Wallpaper Engine 作品，共 {data?.total ?? '…'} 项。</p></div>
-      {data?.author.profileUrl && <a className="secondary author-steam-link" href={data.author.profileUrl} target="_blank" rel="noopener noreferrer">Steam 主页</a>}
+      {data?.author.profileUrl && <a className="button-link secondary author-steam-link" href={data.author.profileUrl} target="_blank" rel="noopener noreferrer">Steam 主页</a>}
     </div>
     <div className="filters"><MultiSelectFilter label="类型" options={typeOptions} selected={types} onChange={changeTypes}/><MultiSelectFilter label="内容分级" options={availableRatingOptions} selected={ratings} onChange={changeRatings}/></div>
     {contentFilter && <p className="filter-notice">内容过滤已开启：不显示成人和未分级内容，可在 Steam 设置中关闭。</p>}

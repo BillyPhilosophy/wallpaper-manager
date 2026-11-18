@@ -13,7 +13,9 @@ test('author page opens from wallpaper details and downloads into the manager qu
   await page.route('**/api/workshop/authors/*/files**', (route) => route.fulfill({ json: { author: { steamId, name: 'Author name', avatarUrl: null, profileUrl: `https://steamcommunity.com/profiles/${steamId}` }, items: [workshop], page: 1, pageSize: 20, total: 1 } }));
   await page.route('**/api/wallpapers/123/download', (route) => { downloads += 1; return route.fulfill({ json: { job: { id: 'job-1', workshopId: '123', status: 'queued', attempt: 1 } } }); });
   await page.goto('/wallpaper/123', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('link', { name: '作者主页', exact: true })).toHaveCSS('display', /flex/);
   await page.getByRole('link', { name: '作者主页', exact: true }).click();
+  await expect(page.getByRole('link', { name: 'Steam 主页', exact: true })).toHaveCSS('display', /flex/);
   await expect(page.getByRole('heading', { name: 'Author name', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Author scene', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '下载', exact: true }).click();

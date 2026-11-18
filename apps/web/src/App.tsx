@@ -8,6 +8,7 @@ import { DownloadsPage } from './pages/DownloadsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { DetailPage } from './pages/DetailPage';
 import { AuthorPage } from './pages/AuthorPage';
+import { GroupsPage } from './pages/GroupsPage';
 import { DynamicBackground } from './features/appearance/DynamicBackground';
 import { useAppearance } from './features/appearance/AppearanceContext';
 import { Icon, type IconName } from './components/Icon';
@@ -15,6 +16,7 @@ import { Icon, type IconName } from './components/Icon';
 const navigation: { to: string; label: string; mobileLabel: string; icon: IconName; end?: boolean }[] = [
   { to: '/', label: '工坊搜索', mobileLabel: '搜索', icon: 'search', end: true },
   { to: '/library', label: '我的壁纸', mobileLabel: '壁纸', icon: 'library' },
+  { to: '/groups', label: '分组管理', mobileLabel: '分组', icon: 'filter' },
   { to: '/favorites', label: '我的收藏', mobileLabel: '收藏', icon: 'heart' },
   { to: '/subscriptions', label: '订阅同步', mobileLabel: '订阅', icon: 'sync' },
   { to: '/downloads', label: '下载中心', mobileLabel: '下载', icon: 'download' },
@@ -53,9 +55,9 @@ export default function App() {
         <NavLink className="mobile-settings" to="/settings" aria-label="Steam 设置"><Icon name="settings"/></NavLink>
       </header>
       <main>
-        <Routes><Route path="/" element={<SearchPage/>}/><Route path="/library" element={<LibraryPage/>}/><Route path="/favorites" element={<FavoritesPage/>}/><Route path="/subscriptions" element={<SubscriptionsPage/>}/><Route path="/downloads" element={<DownloadsPage/>}/><Route path="/settings" element={<SettingsPage/>}/><Route path="/wallpaper/:workshopId" element={<DetailPage/>}/><Route path="/author/:steamId" element={<AuthorPage/>}/></Routes>
+        <Routes><Route path="/" element={<SearchPage/>}/><Route path="/library" element={<LibraryPage/>}/><Route path="/favorites" element={<FavoritesPage/>}/><Route path="/subscriptions" element={<SubscriptionsPage/>}/><Route path="/downloads" element={<DownloadsPage/>}/><Route path="/settings" element={<SettingsPage/>}/><Route path="/wallpaper/:workshopId" element={<DetailPage/>}/><Route path="/author/:steamId" element={<AuthorPage/>}/><Route path="/groups" element={<GroupsPage/>}/></Routes>
       </main>
-      <nav className="mobile-tab-bar" aria-label="移动端主导航">{navigation.slice(0, 5).map((item) => <NavLink key={item.to} to={item.to} end={item.end} aria-label={item.label}><Icon name={item.icon} size={21}/><span>{item.mobileLabel}</span></NavLink>)}</nav>
+      <nav className="mobile-tab-bar" aria-label="移动端主导航">{navigation.filter((item) => ['/', '/library', '/favorites', '/subscriptions', '/downloads'].includes(item.to)).map((item) => <NavLink key={item.to} to={item.to} end={item.end} aria-label={item.label}><Icon name={item.icon} size={21}/><span>{item.mobileLabel}</span></NavLink>)}</nav>
     </div>
     {backgroundAvailable && <button ref={visibilityButton} type="button" className={`ui-visibility-toggle${uiHidden ? ' is-hidden' : ''}`} aria-pressed={uiHidden} onClick={() => setUiHidden((value) => !value)}><Icon name={uiHidden ? 'eye' : 'eye-off'} size={18}/><span>{uiHidden ? '显示界面' : '欣赏背景'}</span></button>}
   </>;

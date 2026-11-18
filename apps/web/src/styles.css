@@ -622,3 +622,33 @@ pre { max-height: 300px; overflow: auto; padding: 14px; border-radius: 10px; bac
 .library-card-actions { display: flex; align-items: center; gap: 5px; }
 .library-card-actions .group-assignment-menu { z-index: 2; }
 .danger-text { color: #ff9c9c !important; }
+
+.button-link { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 9px 15px; border: 1px solid var(--border); border-radius: 10px; background: var(--chip); color: var(--text); font-size: 12px; text-decoration: none; box-shadow: none; }
+.button-link:hover { background: var(--accent-soft); color: var(--accent); }
+.detail-author-link { white-space: nowrap; }
+.author-steam-link { min-height: 38px; padding: 8px 14px; background: rgba(10,13,20,.58); color: #eef0f7; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+.groups-manager-grid { display: grid; grid-template-columns: minmax(280px, .8fr) minmax(360px, 1.2fr); gap: 22px; }
+.group-manager-create { display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: end; }
+.group-manager-create label:first-child { grid-column: 1 / -1; }
+.group-manager-create input[type=color] { width: 64px; height: 40px; padding: 4px; }
+.default-group-setting { display: grid; gap: 8px; margin-top: 24px; color: var(--muted); font-size: 12px; }
+.default-group-setting select, .bulk-group-bar select { min-height: 40px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--field); color: var(--text); }
+.group-manager-list { display: grid; gap: 10px; }
+.group-manager-item { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+.group-manager-item > i { width: 12px; height: 12px; border-radius: 50%; }
+.group-manager-item div { display: grid; gap: 4px; }
+.group-manager-item span { color: var(--muted); font-size: 12px; }
+.bulk-group-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 0 0 18px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--card-bg); }
+.bulk-group-bar strong { font-size: 13px; }
+.bulk-group-bar select { min-width: 180px; }
+.library-select-item { position: relative; min-width: 0; }
+.library-select-item.is-selected { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 18px; }
+.library-select-checkbox { position: absolute; top: 12px; left: 12px; z-index: 3; width: 24px; height: 24px; min-height: 0; margin: 0; accent-color: var(--accent); }
+@media (max-width: 900px) {
+  .groups-manager-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 700px) {
+  .group-manager-item { grid-template-columns: auto 1fr; }
+  .group-manager-item button { grid-row: 2; }
+  .bulk-group-bar select { flex: 1; min-width: 150px; }
+}

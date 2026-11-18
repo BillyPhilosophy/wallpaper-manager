@@ -115,7 +115,7 @@ describe('Steam subscription synchronization', () => {
     };
     const result = await new WorkshopController({ db } as any).authorFiles('76561197960265851', '2', '20', 'scene', 'everyone');
     const params = new URL(String(fetchMock.mock.calls[0][0])).searchParams;
-    expect(params.get('type')).toBe('public');
+    expect(params.get('type')).toBe('myfiles');
     expect(params.get('page')).toBe('2');
     expect(params.get('requiredtags[0]')).toBe('Scene');
     expect(params.get('excludedtags[0]')).toBe('Questionable');

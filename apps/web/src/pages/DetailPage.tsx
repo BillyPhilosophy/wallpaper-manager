@@ -129,7 +129,7 @@ export function DetailPage() {
           {downloaded ? <button onClick={toggleLive}>{live ? '查看官方预览' : '启动实时预览'}</button> : <button onClick={() => void download()}>下载到壁纸库</button>}
           {downloaded && <button className="secondary set-background" onClick={setBackground}><Icon name="image" size={17}/>设为背景</button>}
           <FavoriteButton item={favoriteItem} onChange={() => { remote.reload(); local.reload(); }}/>
-          {authorId && <Link className="secondary" to={`/author/${authorId}`}><Icon name="monitor" size={17}/>作者主页</Link>}
+          {authorId && <Link className="button-link secondary detail-author-link" to={`/author/${authorId}`}>作者主页</Link>}
         </div>
         {wallpaper?.fileSizeBytes && <p className="muted">本地大小 {(Number(wallpaper.fileSizeBytes) / 1024 / 1024).toFixed(1)} MB</p>}
         <details><summary>完整官方元数据</summary><pre>{JSON.stringify(wallpaper?.metadataJson || item?.metadataJson, null, 2)}</pre></details>
