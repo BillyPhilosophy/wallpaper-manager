@@ -22,7 +22,7 @@ export function AppearancePanel() {
   const wallpapers = useRemote<Page<Wallpaper>>(() => api('/wallpapers?status=downloaded&page=1&pageSize=100'), []);
   const groups = useRemote<{ items: WallpaperGroup[] }>(() => api('/groups'), [], 5000);
   const [rotationStatus, setRotationStatus] = useState<{ index: number; total: number } | null>(null);
-  const selectedGroup = groups.data?.items.find((group) => group.id === settings.rotationGroupId);
+  const selectedGroup = groups.data?.items?.find((group) => group.id === settings.rotationGroupId);
   const playableCount = selectedGroup?.playableCount ?? 0;
   useEffect(() => {
     const changed = (event: Event) => setRotationStatus((event as CustomEvent<{ index: number; total: number }>).detail);
