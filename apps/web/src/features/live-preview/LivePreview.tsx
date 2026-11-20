@@ -12,7 +12,8 @@ export function LivePreview({ descriptor, background = false, paused = false, au
   const qualityCallback = useRef(onQualityChange);
   qualityCallback.current = onQualityChange;
   const { enabled: cacheEnabled, prepare: prepareCache } = useBrowserCache();
-  const [cacheReady, setCacheReady] = useState(!cacheEnabled || !cacheVersion);
+  const videoCacheEnabled = cacheEnabled && !background && descriptor.mode === 'local-video' && descriptor.type === 'video' && !!cacheVersion;
+  const [cacheReady, setCacheReady] = useState(!videoCacheEnabled);
   const [error, setError] = useState('');
   const postDescriptor = () => {
     frame.current?.contentWindow?.postMessage({ type: 'wm-preview-mount', descriptor, options: background ? { fit: 'cover', fps: 30, interactive: false, autoQuality } : { fit, autoQuality } }, '*');
@@ -31,14 +32,14 @@ export function LivePreview({ descriptor, background = false, paused = false, au
   };
   useEffect(() => {
     let active = true;
-    if (!cacheEnabled || !cacheVersion || descriptor.mode === 'official-preview') {
+    if (!videoCacheEnabled) {
       setCacheReady(true);
     } else {
       setCacheReady(false);
       void prepareCache(descriptor.workshopId, cacheVersion).finally(() => { if (active) setCacheReady(true); });
     }
     return () => { active = false; };
-  }, [cacheEnabled, cacheVersion, descriptor.workshopId, descriptor.mode, prepareCache]);
+  }, [videoCacheEnabled, cacheVersion, descriptor.workshopId, prepareCache]);
   useEffect(() => {
     setError('');
     if (descriptor.mode === 'official-preview' || descriptor.mode === 'local-video') return;
@@ -105,7 +106,8 @@ export function LivePreview({ descriptor, background = false, paused = false, au
   }
   if (descriptor.mode === 'local-video' && descriptor.resourceBaseUrl && descriptor.entry) {
     const source = `${descriptor.resourceBaseUrl.replace(/\/$/, '')}/${descriptor.entry.split('/').map(encodeURIComponent).join('/')}`;
-    return <video ref={video} className={`preview local-video${background ? ' background-renderer' : ''}`} style={{ objectFit: background ? 'cover' : fit }} src={source} controls={!background && videoControls} autoPlay={background && !paused && !document.hidden} muted={!audioEnabled || document.hidden} loop={background && backgroundLoop} playsInline onEnded={onEnded} preload={background ? 'auto' : 'none'} aria-label={background ? undefined : '本地视频实时预览'} onError={() => setError('本地视频加载失败')}/>;
+    const sourceWithCache = videoCacheEnabled ? `${source}?wm-video-cache=1` : source;
+    return <video ref={video} className={`preview local-video${background ? ' background-renderer' : ''}`} style={{ objectFit: background ? 'cover' : fit }} src={sourceWithCache} controls={!background && videoControls} autoPlay={background && !paused && !document.hidden} muted={!audioEnabled || document.hidden} loop={background && backgroundLoop} playsInline onEnded={onEnded} preload={background ? 'auto' : 'none'} aria-label={background ? undefined : '本地视频实时预览'} onError={() => setError('本地视频加载失败')}/>;
   }
   return <iframe ref={frame} className={`live-preview live-preview-frame${background ? ' background-renderer' : ''}`} src="/preview.html" sandbox={background ? 'allow-scripts allow-same-origin' : 'allow-scripts allow-same-origin allow-pointer-lock'} aria-label={background ? undefined : 'WebWallGL 实时预览'} tabIndex={background ? -1 : undefined} onLoad={() => { postDescriptor(); postPaused(); postAudio(); postFit(); postAutoQuality(); }}/>;
 }

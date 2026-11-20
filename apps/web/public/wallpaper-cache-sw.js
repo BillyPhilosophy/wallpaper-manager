@@ -1,6 +1,6 @@
-const cachePrefix = 'wallpaper-resources-v2-wwgl-3.0.2-';
-const legacyCachePrefix = 'wallpaper-resources-v1-';
-const databaseName = 'wallpaper-browser-cache-v1';
+const cachePrefix = 'wallpaper-video-cache-v1-';
+const legacyCachePrefix = 'wallpaper-resources-';
+const databaseName = 'wallpaper-video-cache-v1';
 const maxCacheBytes = 1024 * 1024 * 1024;
 const maxFileBytes = 512 * 1024 * 1024;
 const inFlight = new Map();
@@ -243,7 +243,7 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
   const match = /^\/api\/wallpapers\/(\d+)\/resources(?:\/|$)/.exec(url.pathname);
-  if (url.origin === self.location.origin && match) event.respondWith(serveResource(event, match[1]));
+  if (url.origin === self.location.origin && match && url.searchParams.get('wm-video-cache') === '1') event.respondWith(serveResource(event, match[1]));
 });
 
 async function usage() {
@@ -283,6 +283,7 @@ self.addEventListener('message', (event) => {
         const workshopId = String(event.data.workshopId || '');
         const version = String(event.data.version || '');
         const versionTime = Date.parse(version);
+        if (event.data.kind !== 'video') throw new Error('仅允许缓存视频资源');
         if (!/^\d+$/.test(workshopId) || !version || version.length > 128 || !Number.isFinite(versionTime)) throw new Error('壁纸版本信息无效');
         await enqueue(async () => {
           const [currentVersion, currentTime] = await readStates([`version:${workshopId}`, `versionTime:${workshopId}`]);

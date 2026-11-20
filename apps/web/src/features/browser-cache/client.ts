@@ -49,7 +49,7 @@ export async function setBrowserCacheEnabled(enabled: boolean): Promise<void> {
 }
 
 export async function prepareBrowserCache(workshopId: string, version: string): Promise<void> {
-  await request('wm-cache-prepare', { workshopId, version });
+  await request('wm-cache-prepare', { workshopId, version, kind: 'video' });
 }
 
 export async function clearBrowserCache(): Promise<void> {
