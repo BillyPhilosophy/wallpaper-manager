@@ -71,6 +71,8 @@ API Key 也可通过 Compose 支持的安全密钥注入机制提供；不要提
 
 迁移仅由 API 容器启动命令执行，Worker 等待 API 健康后启动。Redis 已开启 AOF，Worker 并发固定为 1。Worker 使用固定版本的原生 ARM64 DepotDownloader 和 steamguard-cli，不再需要 Box64 或 32 位运行库；真实登录、自动 Guard 和下载仍需在目标 ARM64 Linux 设备上实测。
 
+下载失败会保留 `staging/<工坊ID>` 中的暂存文件，重试时由 DepotDownloader 校验已有文件块并仅下载缺失或损坏的部分；主动取消则清理暂存文件。`DOWNLOAD_TIMEOUT_MS` 默认 `1800000`，限制的是连续无新增下载字节的时长，而不是整个任务的总时长。保持 `staging` 为持久挂载，Worker 重启后才能复用这些进度。
+
 修改 `WALLPAPER_DATA_ROOT` 或 `STEAM_DATA_ROOT` 不会自动迁移已有数据。切换路径前应停止服务，将原数据完整迁移并校验后再修改配置；保留旧副本直到服务验证通过，同时更新 DSH 的实际 `STEAM_DATA_ROOT` 共享目录配置。
 
 ## 备份和恢复

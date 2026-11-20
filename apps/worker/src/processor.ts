@@ -3,7 +3,7 @@ import path from 'node:path';
 import IORedis from 'ioredis';
 import type { Job } from 'bullmq';
 import { prisma, PrismaClient } from '@wallpaper-manager/database';
-import { directorySize, inspectWallpaper, moveToTrash, publishDirectory, sanitizeError, stagingWorkshopDirectory, wallpaperDirectory } from '@wallpaper-manager/wallpaper-files';
+import { directorySize, inspectWallpaper, moveToTrash, publishDirectory, resumableStagingDirectory, resumableWorkshopDirectory, sanitizeError, wallpaperDirectory } from '@wallpaper-manager/wallpaper-files';
 import type { SteamClient } from './steam';
 import type { DownloadProgress } from '@wallpaper-manager/contracts';
 
@@ -35,13 +35,13 @@ export class DownloadProcessor {
     });
   }
   async process(job: Job<DownloadPayload>): Promise<void> {
-    const { jobId, workshopId } = job.data; const staging = path.join(this.stagingDir, jobId);
+    const { jobId, workshopId } = job.data; const staging = resumableStagingDirectory(this.stagingDir, workshopId);
     try {
       if (await this.cancelled(jobId)) throw new Error('CANCELLED');
       if (await this.recoverPublished(jobId, workshopId)) return;
       await this.stage(jobId, workshopId, ['queued'], 'downloading');
       await fs.mkdir(staging, { recursive: true, mode: 0o755 });
-      const source = stagingWorkshopDirectory(this.stagingDir, jobId, workshopId);
+      const source = resumableWorkshopDirectory(this.stagingDir, workshopId);
       await this.steam.download(source, workshopId, () => this.cancelled(jobId), (progress) => { this.progress.set(jobId, progress); });
       await this.stage(jobId, workshopId, ['downloading'], 'verifying');
       const info = await inspectWallpaper(source);
@@ -57,7 +57,7 @@ export class DownloadProcessor {
       const safe = sanitizeWorkerError(error); const cancelled = safe.code === 'CANCELLED' || await this.cancelled(jobId); const status = cancelled ? 'cancelled' : 'failed';
       await this.db.downloadJob.updateMany({ where: { id: jobId, status: { notIn: ['succeeded', 'cancelled'] } }, data: { status, activeWorkshopId: null, errorCode: cancelled ? 'CANCELLED' : safe.code, errorMessage: cancelled ? '用户已取消' : safe.message, finishedAt: new Date() } });
       await this.db.wallpaper.updateMany({ where: { workshopId, status: { notIn: ['downloaded', 'deleting'] } }, data: { status: 'not_downloaded', localRelativePath: null, lastErrorCode: cancelled ? 'CANCELLED' : safe.code, lastErrorMessage: cancelled ? '用户已取消' : safe.message } });
-      await fs.rm(staging, { recursive: true, force: true }).catch(() => undefined);
+      if (cancelled) await fs.rm(staging, { recursive: true, force: true }).catch(() => undefined);
       this.progress.delete(jobId);
       if (cancelled) return; throw error;
     }
@@ -74,7 +74,7 @@ export async function refreshDownloadedClassifications(steamRoot: string, db: Pr
 }
 export function sanitizeWorkerError(error: unknown): { code: string; message: string } {
   const code = error instanceof Error ? error.message : 'INTERNAL_ERROR';
-  const known: Record<string, string> = { STEAM_AUTH_REQUIRED: '需要先完成 Steam 登录', STEAM_GUARD_REQUIRED: '需要 Steam Guard 验证码', STEAM_BUSY: '另一个 Steam 操作正在进行', STEAM_RATE_LIMITED: 'Steam 下载限流，请稍后重试', STEAM_NETWORK_UNAVAILABLE: '无法连接 Steam，请检查直连或代理线路', STEAM_APP_UNAVAILABLE: '当前账号无法访问 Wallpaper Engine', STEAM_PROCESS_FAILED: 'DepotDownloader 进程异常退出，请检查日志中的错误码', STEAM_DOWNLOAD_FAILED: 'Steam 下载失败', DOWNLOAD_TIMEOUT: '下载超时', DISK_FULL: '磁盘空间不足', WORKSHOP_ITEM_NOT_FOUND: '工坊项目不存在或不可访问', UNSUPPORTED_TYPE: '不支持该壁纸类型', RESOURCE_MISSING: '壁纸关键资源缺失', CANCELLED: '用户已取消' };
+  const known: Record<string, string> = { STEAM_AUTH_REQUIRED: '需要先完成 Steam 登录', STEAM_GUARD_REQUIRED: '需要 Steam Guard 验证码', STEAM_BUSY: '另一个 Steam 操作正在进行', STEAM_RATE_LIMITED: 'Steam 下载限流，请稍后重试', STEAM_NETWORK_UNAVAILABLE: '无法连接 Steam，请检查直连或代理线路', STEAM_APP_UNAVAILABLE: '当前账号无法访问 Wallpaper Engine', STEAM_PROCESS_FAILED: 'DepotDownloader 进程异常退出，请检查日志中的错误码', STEAM_DOWNLOAD_FAILED: 'Steam 下载失败', DOWNLOAD_TIMEOUT: '下载长时间无进展，已保留已下载内容，可直接重试', DISK_FULL: '磁盘空间不足', WORKSHOP_ITEM_NOT_FOUND: '工坊项目不存在或不可访问', UNSUPPORTED_TYPE: '不支持该壁纸类型', RESOURCE_MISSING: '壁纸关键资源缺失', CANCELLED: '用户已取消' };
   if (known[code]) return { code, message: known[code] };
   return sanitizeError(error);
 }

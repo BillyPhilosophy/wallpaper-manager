@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, stat, writeFile, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { stagingWorkshopDirectory } from '@wallpaper-manager/wallpaper-files';
+import { resumableWorkshopDirectory } from '@wallpaper-manager/wallpaper-files';
 import { deleteWallpaper, DownloadProcessor, sanitizeWorkerError } from '../src/processor';
 import type { SteamClient } from '../src/steam';
 
@@ -42,11 +42,50 @@ describe('DepotDownloader processing', () => {
     try {
       await processor.process({ data: { jobId, workshopId: '123' } } as any);
       expect(processor.getProgress()).toEqual([]);
-      expect(downloadTarget).toBe(stagingWorkshopDirectory(stagingDir, jobId, '123'));
+      expect(downloadTarget).toBe(resumableWorkshopDirectory(stagingDir, '123'));
       const published = path.join(steamRoot, 'steamapps', 'workshop', 'content', '431960', '123');
       expect(JSON.parse(await readFile(path.join(published, 'project.json'), 'utf8')).title).toBe('Scene');
       expect((await stat(path.join(published, 'scene.pkg'))).isFile()).toBe(true);
       expect(downloadJob.updateMany).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'succeeded' }) }));
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves partial files and reuses the same directory after a stalled download', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'wallpaper-manager-processor-'));
+    const stagingDir = path.join(root, 'staging');
+    const steamRoot = path.join(root, 'steam-data');
+    const targets: string[] = [];
+    const steam: SteamClient = {
+      status: 'auth_required', steamId: null, accountName: 'test',
+      initialize: vi.fn(), login: vi.fn(), guard: vi.fn(), logout: vi.fn(), close: vi.fn(),
+      download: vi.fn(async (target: string) => {
+        targets.push(target);
+        await mkdir(target, { recursive: true });
+        const partial = path.join(target, 'partial.bin');
+        if (targets.length === 1) {
+          await writeFile(partial, 'partial');
+          throw new Error('DOWNLOAD_TIMEOUT');
+        }
+        expect(await readFile(partial, 'utf8')).toBe('partial');
+        await writeFile(path.join(target, 'project.json'), JSON.stringify({ title: 'Resumed', type: 'scene', file: 'scene.pkg' }));
+        await writeFile(path.join(target, 'scene.pkg'), 'fixture');
+      }),
+    };
+    const downloadJob = { updateMany: vi.fn().mockResolvedValue({ count: 1 }) };
+    const wallpaper = { updateMany: vi.fn().mockResolvedValue({ count: 1 }), update: vi.fn(), findUnique: vi.fn().mockResolvedValue({ downloadedAt: null }) };
+    const db = { downloadJob, wallpaper, $transaction: vi.fn((callback) => callback({ downloadJob, wallpaper })) };
+    const processor = new DownloadProcessor(steam, { exists: vi.fn().mockResolvedValue(0) } as any, stagingDir, steamRoot, db as any);
+    try {
+      await expect(processor.process({ data: { jobId: crypto.randomUUID(), workshopId: '123' } } as any)).rejects.toThrow('DOWNLOAD_TIMEOUT');
+      const partial = path.join(resumableWorkshopDirectory(stagingDir, '123'), 'partial.bin');
+      expect((await stat(partial)).isFile()).toBe(true);
+      expect(downloadJob.updateMany).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ errorMessage: '下载长时间无进展，已保留已下载内容，可直接重试' }) }));
+      await processor.process({ data: { jobId: crypto.randomUUID(), workshopId: '123' } } as any);
+      expect(targets).toEqual([resumableWorkshopDirectory(stagingDir, '123'), resumableWorkshopDirectory(stagingDir, '123')]);
+      await expect(stat(partial)).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(JSON.parse(await readFile(path.join(steamRoot, 'steamapps/workshop/content/431960/123/project.json'), 'utf8')).title).toBe('Resumed');
     } finally {
       await rm(root, { recursive: true, force: true });
     }

@@ -331,6 +331,47 @@ describe('DepotDownloader downloads', () => {
     }
   });
 
+  it('times out when no network progress arrives', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'wallpaper-manager-depot-'));
+    const depot = new FakeProcess();
+    vi.mocked(spawn).mockReturnValue(depot.asChild());
+    const steam = new DepotDownloaderClient('depotdownloader', path.join(root, 'config'), 100, new SteamGuardClient('steamguard', path.join(root, 'missing')));
+    steam.accountName = 'test';
+    try {
+      await expect(steam.download(path.join(root, 'target'), '123', async () => false)).rejects.toThrow('DOWNLOAD_TIMEOUT');
+      expect(depot.kill).toHaveBeenCalledWith('SIGTERM');
+    } finally {
+      await steam.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('does not time out while network progress continues', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'wallpaper-manager-depot-'));
+    const target = path.join(root, 'target');
+    const depot = new FakeProcess();
+    vi.mocked(spawn).mockImplementation(() => {
+      queueMicrotask(async () => {
+        for (const networkBytes of [25, 50, 75, 100]) {
+          await new Promise((resolve) => setTimeout(resolve, networkBytes === 25 ? 50 : 80));
+          depot.output(`WM_PROGRESS {"downloadedBytes":${networkBytes},"networkBytes":${networkBytes},"totalBytes":100}\n`);
+        }
+        depot.close();
+      });
+      return depot.asChild();
+    });
+    const steam = new DepotDownloaderClient('depotdownloader', path.join(root, 'config'), 100, new SteamGuardClient('steamguard', path.join(root, 'missing')));
+    steam.accountName = 'test';
+    try {
+      await steam.download(target, '123', async () => false, () => undefined);
+      expect(depot.exitCode).toBe(0);
+      expect(depot.kill).not.toHaveBeenCalled();
+    } finally {
+      await steam.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('cancels only the active download process', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'wallpaper-manager-depot-'));
     const depot = new FakeProcess();

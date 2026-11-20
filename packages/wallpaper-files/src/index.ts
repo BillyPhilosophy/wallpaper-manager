@@ -23,6 +23,12 @@ export function safeJobId(value: string): string {
 export function stagingWorkshopDirectory(stagingDir: string, jobId: string, workshopId: string): string {
   return path.join(stagingDir, safeJobId(jobId), 'steamapps', 'workshop', 'content', '431960', assertWorkshopId(workshopId));
 }
+export function resumableStagingDirectory(stagingDir: string, workshopId: string): string {
+  return path.join(stagingDir, assertWorkshopId(workshopId));
+}
+export function resumableWorkshopDirectory(stagingDir: string, workshopId: string): string {
+  return path.join(resumableStagingDirectory(stagingDir, workshopId), 'steamapps', 'workshop', 'content', '431960', workshopId);
+}
 
 export interface ProjectInfo { type: WallpaperType; contentRating: ContentRating; entry: string | null; project: Record<string, unknown> }
 function stringValue(value: unknown): string | undefined { return typeof value === 'string' && value.length ? value : undefined; }

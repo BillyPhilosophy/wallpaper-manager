@@ -27,6 +27,8 @@ interface ActiveProcess {
   exitCode: number | null;
   error: boolean;
   progressBuffer: string;
+  startedAt: number;
+  lastProgressAt: number;
   onProgress?: ProgressListener;
   previousNetwork?: { bytes: number; time: number; rate: number };
 }
@@ -238,30 +240,31 @@ export class DepotDownloaderClient implements SteamClient {
       delete env.STEAMGUARD_CLI_PASSKEY;
       console.log(`[steam] network route=${env.STEAM_PROXY_URL ? 'proxy' : 'direct'}`);
       const child = spawn(this.binary, args, { env, stdio: ['pipe', 'pipe', 'pipe'] });
-      const run: ActiveProcess = { child, mode, output: '', exited: false, exitCode: null, error: false, progressBuffer: '', onProgress };
-    const onData = (chunk: Buffer) => {
-      const text = chunk.toString('utf8');
-      run.output = (run.output + text).slice(-32_000);
-      if (run.mode === 'qr') this.captureQr(run.output);
-      if (run.onProgress) {
-        run.progressBuffer = (run.progressBuffer + text).slice(-8192);
-        const lines = run.progressBuffer.split(/\r?\n/);
-        run.progressBuffer = lines.pop() || '';
-        for (const line of lines) {
-          if (line.startsWith('WM_PROGRESS ')) this.reportProgress(run, line);
+      const now = Date.now();
+      const run: ActiveProcess = { child, mode, output: '', exited: false, exitCode: null, error: false, progressBuffer: '', startedAt: now, lastProgressAt: now, onProgress };
+      const onData = (chunk: Buffer) => {
+        const text = chunk.toString('utf8');
+        run.output = (run.output + text).slice(-32_000);
+        if (run.mode === 'qr') this.captureQr(run.output);
+        if (run.onProgress) {
+          run.progressBuffer = (run.progressBuffer + text).slice(-8192);
+          const lines = run.progressBuffer.split(/\r?\n/);
+          run.progressBuffer = lines.pop() || '';
+          for (const line of lines) {
+            if (line.startsWith('WM_PROGRESS ')) this.reportProgress(run, line);
+          }
         }
-      }
-    };
-    child.stdout?.on('data', onData);
-    child.stderr?.on('data', onData);
-    child.on('error', () => { run.error = true; });
-    child.on('close', (code) => {
-      run.exited = true;
-      run.exitCode = code;
-      const message = `[steam] DepotDownloader exited mode=${mode} code=${code ?? 'null'}`;
-      if (code === 0) console.log(message);
-      else console.warn(`${message} reason=${run.error ? 'SPAWN_FAILED' : depotFailureCode(run.output)}`);
-    });
+      };
+      child.stdout?.on('data', onData);
+      child.stderr?.on('data', onData);
+      child.on('error', () => { run.error = true; });
+      child.on('close', (code) => {
+        run.exited = true;
+        run.exitCode = code;
+        const message = `[steam] DepotDownloader exited mode=${mode} code=${code ?? 'null'}`;
+        if (code === 0) console.log(message);
+        else console.warn(`${message} reason=${run.error ? 'SPAWN_FAILED' : depotFailureCode(run.output)}`);
+      });
       this.active = run;
       return run;
     } finally {
@@ -278,6 +281,7 @@ export class DepotDownloaderClient implements SteamClient {
       if (![downloadedBytes, networkBytes, totalBytes].every((value) => Number.isSafeInteger(value) && value >= 0)) return;
       const now = Date.now();
       const previous = run.previousNetwork;
+      if (!previous || networkBytes > previous.bytes) run.lastProgressAt = now;
       let rate = 0;
       if (previous && now > previous.time) {
         const instantaneous = Math.max(0, networkBytes - previous.bytes) / ((now - previous.time) / 1000);
@@ -347,14 +351,14 @@ export class DepotDownloaderClient implements SteamClient {
   }
 
   private async wait(run: ActiveProcess, pattern: RegExp, timeout: number, isCancelled?: () => Promise<boolean>): Promise<boolean> {
-    const deadline = Date.now() + timeout;
     while (!run.exited && !run.error) {
       if (isCancelled && await isCancelled()) {
         this.terminate(run);
         throw new Error('CANCELLED');
       }
       if (pattern.test(run.output)) return true;
-      if (Date.now() >= deadline) {
+      const inactiveMs = run.mode === 'download' ? Date.now() - run.lastProgressAt : Date.now() - run.startedAt;
+      if (inactiveMs >= timeout) {
         this.terminate(run);
         throw new Error('DOWNLOAD_TIMEOUT');
       }
