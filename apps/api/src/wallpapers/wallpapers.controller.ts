@@ -10,6 +10,11 @@ import { injectWebShim, readWebShim } from './web-shim';
 
 const mime: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.htm': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.mp4': 'video/mp4', '.webm': 'video/webm', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.pkg': 'application/octet-stream', '.tex': 'application/octet-stream', '.wasm': 'application/wasm' };
 
+function etagMatches(header: string | undefined, etag: string): boolean {
+  if (!header) return false;
+  return header.trim() === '*' || header.split(',').some((value) => value.trim() === etag);
+}
+
 async function workerDownloadProgress(): Promise<Map<string, DownloadProgress>> {
   try {
     const response = await fetch('http://worker:9780/downloads/progress', { signal: AbortSignal.timeout(3000) });
@@ -162,14 +167,17 @@ export class WallpapersController {
     const raw = request.params.resourcePath; const relative = Array.isArray(raw) ? raw.join('/') : raw;
     const file = await resolveResourcePath(process.env.STEAM_ROOT || './steam-data', id, relative);
     const stat = await fs.stat(file); const type = mime[path.extname(file).toLowerCase()] || 'application/octet-stream';
-    response.setHeader('Content-Type', type); response.setHeader('Accept-Ranges', 'bytes'); response.setHeader('Cache-Control', 'private, max-age=60');
+    response.setHeader('Content-Type', type); response.setHeader('Accept-Ranges', 'bytes'); response.setHeader('Cache-Control', 'private, max-age=600');
+    const etag = `"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs * 1000).toString(16)}"`;
+    response.setHeader('ETag', etag); response.setHeader('Last-Modified', new Date(stat.mtimeMs).toUTCString());
     if (type.startsWith('text/html')) {
       const html = injectWebShim(await fs.readFile(file, 'utf8'), await readWebShim(), `/api/wallpapers/${id}/resources/`);
       response.status(200).setHeader('Cache-Control', 'no-store').setHeader('Content-Length', Buffer.byteLength(html));
       if (request.method === 'HEAD') response.end(); else response.send(html);
       return;
     }
-    const range = request.headers.range; let start = 0; let end = stat.size - 1; let status = 200;
+    if (etagMatches(request.headers['if-none-match'], etag)) { response.status(304).end(); return; }
+    const range = request.headers['if-range'] && request.headers['if-range'] !== etag ? undefined : request.headers.range; let start = 0; let end = stat.size - 1; let status = 200;
     if (range) {
       const match = /^bytes=(\d*)-(\d*)$/.exec(range); if (!match) { response.status(416).setHeader('Content-Range', `bytes */${stat.size}`).end(); return; }
       if (!match[1] && match[2]) start = Math.max(0, stat.size - Number(match[2])); else start = Number(match[1]);

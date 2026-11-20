@@ -48,6 +48,7 @@ describe('LivePreview', () => {
     const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
     const view = render(<LivePreview descriptor={videoDescriptor} background/>);
     const player = view.container.querySelector('video') as HTMLVideoElement;
+    expect(player.getAttribute('preload')).toBe('auto');
     expect(player.muted).toBe(false);
     expect(play).toHaveBeenCalledOnce();
 
