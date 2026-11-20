@@ -50,31 +50,36 @@ export function LibraryPage() {
   const remove = async (id: string) => { if (!confirm('确定从网站与 DSH 共享目录删除这张壁纸？')) return; await api(`/wallpapers/${id}`, { method: 'DELETE' }); refresh(); };
   const toggleSelected = (id: string) => setSelected((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
   const toggleSelectionMode = () => { setSelectionMode((value) => !value); setSelected([]); setTargetGroup(''); };
-  const applyGroups = async () => {
+  const applyGroups = async (mode: 'join' | 'remove' | 'removeAll') => {
     if (!selected.length || !targetGroup) return;
+    if (mode === 'removeAll' && !window.confirm('确定将所选壁纸移出全部分组？不会删除壁纸文件。')) return;
     setBulkBusy(true);
     try {
-      await Promise.all(selected.map((id) => {
+      const results = await Promise.allSettled(selected.map((id) => {
         const current = data?.items.find((item) => item.workshopId === id)?.groupIds || [];
-        const groupIds = targetGroup === 'none' ? [] : [...new Set([...current, targetGroup])];
+        const groupIds = mode === 'removeAll' ? [] : mode === 'join' ? [...new Set([...current, targetGroup])] : current.filter((groupId) => groupId !== targetGroup);
         return api(`/wallpapers/${id}/groups`, { method: 'PUT', body: JSON.stringify({ groupIds }) });
       }));
+      const failed = results.filter((result) => result.status === 'rejected').length;
       refresh();
       setSelected([]); setSelectionMode(false); setTargetGroup('');
-    } catch (error) { alert(error instanceof Error ? error.message : '批量设置分组失败'); }
-    finally { setBulkBusy(false); }
+      if (failed) window.alert(`${failed} 张壁纸设置失败，其余已成功。`);
+    } finally { setBulkBusy(false); }
   };
+  const targetJoinedCount = targetGroup && targetGroup !== 'none'
+    ? selected.filter((id) => data?.items.find((item) => item.workshopId === id)?.groupIds?.includes(targetGroup)).length
+    : 0;
   return <section aria-busy={loading}>
     <div className="page-heading"><div><p className="eyebrow">YOUR COLLECTION</p><h1>我的壁纸</h1><p>软分组仅整理数据库关联，不移动源文件，也不会影响 DSH。</p></div></div>
     <div className="filters"><input placeholder="筛选标题或 ID" aria-label="筛选标题或 ID" value={q} onChange={(event) => changeQ(event.target.value)}/><MultiSelectFilter label="类型" options={typeOptions} selected={types} onChange={changeTypes}/><MultiSelectFilter label="内容分级" options={ratingOptions} selected={ratings} onChange={changeRatings}/><GroupMenu groups={groups.data?.items || []} selected={groupId} onSelect={changeGroup} reload={groups.reload}/><Link className="button-link secondary library-manage-groups" to="/groups">管理分组</Link><button type="button" className="secondary" onClick={toggleSelectionMode}>{selectionMode ? '取消批量' : '批量分组'}</button></div>
-    {selectionMode && <div className="bulk-group-bar"><strong>已选 {selected.length} 张</strong><button type="button" className="text-button" onClick={() => setSelected(data?.items.map((item) => item.workshopId) || [])}>选择本页</button><select aria-label="目标分组" value={targetGroup} onChange={(event) => setTargetGroup(event.target.value)}><option value="">选择目标分组</option><option value="none">移出所有分组</option>{(groups.data?.items || []).map((group) => <option key={group.id} value={group.id}>加入：{group.name}</option>)}</select><button type="button" disabled={bulkBusy || !selected.length || !targetGroup} onClick={() => void applyGroups()}>{bulkBusy ? '正在设置…' : '应用到所选'}</button></div>}
+    {selectionMode && <div className="bulk-group-bar"><strong>已选 {selected.length} 张</strong><button type="button" className="text-button" onClick={() => setSelected(data?.items.map((item) => item.workshopId) || [])}>选择本页</button><select aria-label="目标分组" value={targetGroup} onChange={(event) => setTargetGroup(event.target.value)}><option value="">选择目标分组</option><option value="none">移出所有分组</option>{(groups.data?.items || []).map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select>{targetGroup && targetGroup !== 'none' && <span className="muted">{targetJoinedCount} 张已加入 · {selected.length - targetJoinedCount} 张将变更</span>}<button type="button" disabled={bulkBusy || !selected.length || targetGroup === 'none'} onClick={() => void applyGroups('join')}>加入分组</button><button type="button" className="secondary" disabled={bulkBusy || !selected.length || targetGroup === 'none'} onClick={() => void applyGroups('remove')}>从分组移除</button><button type="button" className="secondary danger-text" disabled={bulkBusy || !selected.length || targetGroup !== 'none'} onClick={() => void applyGroups('removeAll')}>移出全部分组</button></div>}
     {error && <div className="error-state">{error}<button className="text-button" onClick={reload}>重试</button></div>}
     {loading && data && <div className="inline-loading" role="status">正在更新壁纸库…</div>}
     {loading && !data ? <div className="loading" role="status">正在读取壁纸库…</div> : <div className={`wallpaper-grid${loading ? ' is-loading' : ''}`}>{data?.items.map((wallpaper) => {
       const item = { ...wallpaper, metadataJson: wallpaper.metadataJson as Record<string, unknown>, localStatus: wallpaper.status, previewContentType: null };
       return <div className={`library-select-item${selected.includes(wallpaper.workshopId) ? ' is-selected' : ''}`} key={wallpaper.workshopId}>
         {selectionMode && <input className="library-select-checkbox" type="checkbox" aria-label={`选择 ${wallpaper.title}`} checked={selected.includes(wallpaper.workshopId)} onChange={() => toggleSelected(wallpaper.workshopId)}/>}
-        <WallpaperCard item={item} onFavoriteChange={refresh} action={!selectionMode ? <button className="card-icon-action danger" aria-label="删除" title="删除" onClick={() => void remove(wallpaper.workshopId)}><Icon name="trash" size={17}/></button> : null}/>
+        <WallpaperCard item={item} groups={(groups.data?.items || []).filter((group) => wallpaper.groupIds?.includes(group.id))} onFavoriteChange={refresh} action={!selectionMode ? <button className="card-icon-action danger" aria-label="删除" title="删除" onClick={() => void remove(wallpaper.workshopId)}><Icon name="trash" size={17}/></button> : null}/>
       </div>;
     })}</div>}
     {!loading && !error && data && !data.items.length ? <div className="empty-state">还没有匹配的壁纸。</div> : null}

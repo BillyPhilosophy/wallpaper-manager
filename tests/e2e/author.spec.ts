@@ -4,7 +4,7 @@ test.use({ serviceWorkers: 'block' });
 
 test('author page opens from wallpaper details and downloads into the manager queue', async ({ page }) => {
   const steamId = '76561197960265851';
-  const workshop = { workshopId: '123', title: 'Author scene', description: null, type: 'scene', contentRating: 'everyone', subscribed: false, favorited: false, officialPreviewUrl: null, previewContentType: null, metadataJson: { creator: steamId }, localStatus: 'not_downloaded' };
+  const workshop = { workshopId: '123', title: 'Author scene', description: null, type: 'scene', contentRating: 'everyone', subscribed: false, favorited: false, officialPreviewUrl: null, previewContentType: null, metadataJson: { creator: steamId, file_size: 27158118 }, localStatus: 'not_downloaded' };
   const local = { ...workshop, status: 'not_downloaded', localRelativePath: null, fileSizeBytes: null, lastErrorCode: null, lastErrorMessage: null, downloadedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
   let downloads = 0;
   await page.route('**/api/workshop/items/123', (route) => route.fulfill({ json: workshop }));
@@ -14,6 +14,7 @@ test('author page opens from wallpaper details and downloads into the manager qu
   await page.route('**/api/wallpapers/123/download', (route) => { downloads += 1; return route.fulfill({ json: { job: { id: 'job-1', workshopId: '123', status: 'queued', attempt: 1 } } }); });
   await page.goto('/wallpaper/123', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('link', { name: '作者主页', exact: true })).toHaveCSS('display', /flex/);
+  await expect(page.getByText('预估大小 25.9 MB', { exact: true })).toBeVisible();
   await page.getByRole('link', { name: '作者主页', exact: true }).click();
   await expect(page.getByRole('link', { name: 'Steam 主页', exact: true })).toHaveCSS('display', /flex/);
   await expect(page.getByRole('heading', { name: 'Author name', exact: true })).toBeVisible();

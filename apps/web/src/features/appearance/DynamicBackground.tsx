@@ -44,9 +44,13 @@ export function DynamicBackground() {
   }, [settings.backgroundId, settings.rotationGroupId, settings.rotationIntervalMinutes, settings.rotationOrder, settings.rotationTrigger]);
   useEffect(() => {
     if (!rotationActive || !rotation.data) return;
-    if (rotationItems.length < 2) { update({ rotationEnabled: false }); return; }
+    if (rotationItems.length < 2) return;
     if (!currentRotationItem && rotationItems.length) update({ backgroundId: rotationItems[0].workshopId, backgroundMode: 'dynamic' });
   }, [rotationActive, rotation.data, rotationItems, currentRotationItem, update]);
+  useEffect(() => {
+    if (!rotationActive) return;
+    window.dispatchEvent(new CustomEvent('wm-background-rotation-status', { detail: { index: Math.max(0, rotationItems.findIndex((item) => item.workshopId === settings.backgroundId)) + 1, total: rotationItems.length } }));
+  }, [rotationActive, rotationItems, settings.backgroundId]);
   useEffect(() => {
     if (!rotationActive || rotationItems.length < 2) return;
     const advance = (force = false) => {

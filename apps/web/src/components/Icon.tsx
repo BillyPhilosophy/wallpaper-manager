@@ -1,4 +1,4 @@
-export type IconName = 'search' | 'library' | 'heart' | 'sync' | 'download' | 'settings' | 'chevron-down' | 'check' | 'close' | 'filter' | 'image' | 'trash' | 'moon' | 'sun' | 'monitor' | 'eye' | 'eye-off';
+export type IconName = 'search' | 'library' | 'heart' | 'sync' | 'download' | 'settings' | 'chevron-down' | 'check' | 'close' | 'filter' | 'image' | 'trash' | 'moon' | 'sun' | 'monitor' | 'eye' | 'eye-off' | 'user';
 
 const paths: Record<IconName, React.ReactNode> = {
   search: <><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></>,
@@ -18,6 +18,7 @@ const paths: Record<IconName, React.ReactNode> = {
   monitor: <><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></>,
   eye: <><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.5"/></>,
   'eye-off': <><path d="m3 3 18 18M10.6 6.2A10.8 10.8 0 0 1 12 6c6.5 0 10 6 10 6a16 16 0 0 1-3.1 3.8M6.2 6.8C3.4 8.6 2 12 2 12s3.5 6 10 6a10.8 10.8 0 0 0 4-.7M9.9 9.9a3 3 0 0 0 4.2 4.2"/></>,
+  user: <><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></>,
 };
 
 export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {

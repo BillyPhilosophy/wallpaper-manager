@@ -261,7 +261,7 @@ test('appearance settings persist theme and a downloaded dynamic background', as
     await new Promise((resolve) => setTimeout(resolve, 10000));
     await route.fulfill({ body: 'pending-scene' });
   });
-  await page.route('**/api/groups', (route) => route.fulfill({ json: { items: [{ id: '11111111-1111-4111-8111-111111111111', name: '轮播组', color: '#4f8cff', sortOrder: 0, itemCount: 2, updatedAt: new Date().toISOString() }] } }));
+  await page.route('**/api/groups', (route) => route.fulfill({ json: { items: [{ id: '11111111-1111-4111-8111-111111111111', name: '轮播组', color: '#4f8cff', sortOrder: 0, itemCount: 2, playableCount: 2, updatedAt: new Date().toISOString() }] } }));
   await page.route('**/api/system/capabilities', (route) => route.fulfill({ json: { workerReady: true, steamAuthenticated: false, steamApiKeyConfigured: true, livePreviewTypes: ['scene', 'web'], webwallglVersion: '3.0.2' } }));
   await page.route('**/api/steam/auth/status', (route) => route.fulfill({ json: { status: 'auth_required', message: null, accountName: null, steamId: null, updatedAt: new Date().toISOString() } }));
   await page.route('**/api/steam/auth/qr', (route) => route.fulfill({ json: { status: 'auth_required', qrCode: null, updatedAt: null } }));

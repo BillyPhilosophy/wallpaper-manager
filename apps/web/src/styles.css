@@ -663,3 +663,12 @@ pre { max-height: 300px; overflow: auto; padding: 14px; border-radius: 10px; bac
   .rotation-controls > label { min-width: 0; }
   .rotation-controls .segmented-control { grid-column: 1 / -1; justify-self: start; }
 }
+
+.detail-actions > button, .detail-actions > a { min-height: 40px; padding: 9px 15px; border-radius: 10px; font-size: 13px; }
+.detail-actions > a { display: inline-flex; align-items: center; gap: 7px; }
+.filters .button-link, .filters > button.secondary { min-height: 40px; padding: 9px 12px; font-size: 12px; white-space: nowrap; }
+.card-groups { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.card-group { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 2px 6px; border-radius: 5px; background: var(--chip); color: var(--muted); font-size: 9px; }
+.card-group i { width: 7px; height: 7px; flex: none; border-radius: 50%; }
+.system-group-item small { margin-left: 7px; padding: 2px 5px; border-radius: 4px; background: var(--chip); color: var(--muted); font-size: 9px; font-weight: 400; }
+.rotation-status { color: var(--accent) !important; }

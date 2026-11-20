@@ -16,8 +16,8 @@ function normalizeColor(value: unknown): string {
   return value.toLowerCase();
 }
 
-function serializeGroup(group: any) {
-  return { id: group.id, name: group.name, color: group.color, sortOrder: group.sortOrder, itemCount: group._count?.items ?? 0, updatedAt: group.updatedAt.toISOString() };
+function serializeGroup(group: any, playableCount = 0) {
+  return { id: group.id, name: group.name, color: group.color, sortOrder: group.sortOrder, itemCount: group._count?.items ?? 0, playableCount, updatedAt: group.updatedAt.toISOString() };
 }
 
 @Controller()
@@ -26,8 +26,14 @@ export class GroupsController {
 
   @Get('groups')
   async list() {
-    const groups = await this.infra.db.wallpaperGroup.findMany({ include: { _count: { select: { items: true } } }, orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] });
-    return { items: groups.map(serializeGroup) };
+    const [groups, playable, all, ungrouped] = await Promise.all([
+      this.infra.db.wallpaperGroup.findMany({ include: { _count: { select: { items: true } } }, orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] }),
+      this.infra.db.wallpaperGroupItem ? this.infra.db.wallpaperGroupItem.groupBy({ by: ['groupId'], where: { wallpaper: { status: 'downloaded', type: { in: ['scene', 'web', 'video'] } } }, _count: { _all: true } }) : Promise.resolve([]),
+      this.infra.db.wallpaper.count({ where: { status: 'downloaded' } }),
+      this.infra.db.wallpaper.count({ where: { status: 'downloaded', groupItems: { none: {} } } }),
+    ]);
+    const playableCounts = new Map(playable.map((item) => [item.groupId, item._count._all]));
+    return { items: groups.map((group) => serializeGroup(group, playableCounts.get(group.id) || 0)), system: { all, ungrouped } };
   }
 
   @Post('groups')

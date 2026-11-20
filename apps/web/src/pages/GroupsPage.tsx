@@ -6,7 +6,7 @@ import { useRemote } from '../hooks';
 import { defaultLibraryGroup, setDefaultLibraryGroup } from '../features/groups/preferences';
 
 export function GroupsPage() {
-  const { data, error, loading, reload } = useRemote<{ items: WallpaperGroup[] }>(() => api('/groups'), []);
+  const { data, error, loading, reload } = useRemote<{ items: WallpaperGroup[]; system: { all: number; ungrouped: number } }>(() => api('/groups'), []);
   const [name, setName] = useState('');
   const [color, setColor] = useState('#4f8cff');
   const [defaultGroup, setDefaultGroup] = useState(defaultLibraryGroup);
@@ -53,7 +53,10 @@ export function GroupsPage() {
       <article className="settings-card">
         <h2>全部分组 <span className="muted">{groups.length} 个</span></h2>
         {error && <p className="error-text">{error}</p>}
-        {loading && !data ? <p className="muted">正在读取分组…</p> : <div className="group-manager-list">{groups.map((group) => <div className="group-manager-item" key={group.id}>
+        {loading && !data ? <p className="muted">正在读取分组…</p> : <div className="group-manager-list">
+          <div className="group-manager-item system-group-item"><div><strong>全部壁纸 <small>系统视图</small></strong><span>{data?.system?.all ?? 0} 张壁纸 · 不可删除</span></div></div>
+          <div className="group-manager-item system-group-item"><div><strong>未分组 <small>系统视图</small></strong><span>{data?.system?.ungrouped ?? 0} 张壁纸 · 不可删除</span></div></div>
+          {groups.map((group) => <div className="group-manager-item" key={group.id}>
           <i style={{ background: group.color }}/><div><strong>{group.name}</strong><span>{group.itemCount} 张壁纸</span></div>
           <button type="button" className="secondary" disabled={busy} onClick={() => rename(group)}>重命名</button>
           <button type="button" className="secondary danger-text" disabled={busy} onClick={() => remove(group)}>删除</button>

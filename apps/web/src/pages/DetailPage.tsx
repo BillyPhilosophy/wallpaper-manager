@@ -10,6 +10,15 @@ import { useAppearance } from '../features/appearance/AppearanceContext';
 import { Icon } from '../components/Icon';
 import { WorkshopStats } from '../components/WorkshopStats';
 
+function formatSize(value: unknown): string | null {
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes) || bytes <= 0) return null;
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
+}
+
 export function DetailPage() {
   const { workshopId = '' } = useParams();
   const [live, setLive] = useState(false);
@@ -129,9 +138,9 @@ export function DetailPage() {
           {downloaded ? <button onClick={toggleLive}>{live ? '查看官方预览' : '启动实时预览'}</button> : <button onClick={() => void download()}>下载到壁纸库</button>}
           {downloaded && <button className="secondary set-background" onClick={setBackground}><Icon name="image" size={17}/>设为背景</button>}
           <FavoriteButton item={favoriteItem} onChange={() => { remote.reload(); local.reload(); }}/>
-          {authorId && <Link className="button-link secondary detail-author-link" to={`/author/${authorId}`}>作者主页</Link>}
+          {authorId && <Link className="button-link secondary detail-author-link" to={`/author/${authorId}`}><Icon name="user" size={17}/>作者主页</Link>}
         </div>
-        {wallpaper?.fileSizeBytes && <p className="muted">本地大小 {(Number(wallpaper.fileSizeBytes) / 1024 / 1024).toFixed(1)} MB</p>}
+        <p className="muted">{downloaded && wallpaper?.fileSizeBytes ? `本地大小 ${formatSize(wallpaper.fileSizeBytes)}` : `预估大小 ${formatSize(metadata?.file_size) || '未知'}`}</p>
         <details><summary>完整官方元数据</summary><pre>{JSON.stringify(wallpaper?.metadataJson || item?.metadataJson, null, 2)}</pre></details>
       </div>
     </div>

@@ -21,7 +21,7 @@ export interface Wallpaper {
   groupIds?: string[];
 }
 
-export interface WallpaperGroup { id: string; name: string; color: string; sortOrder: number; itemCount: number; updatedAt: string }
+export interface WallpaperGroup { id: string; name: string; color: string; sortOrder: number; itemCount: number; playableCount: number; updatedAt: string }
 export interface WallpaperGroupInput { name: string; color?: string }
 export interface WallpaperGroupAssignment { groupIds: string[] }
 export interface Favorite {

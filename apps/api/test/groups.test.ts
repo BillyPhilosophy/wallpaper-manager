@@ -15,6 +15,17 @@ describe('wallpaper groups', () => {
     expect(result).toMatchObject({ id: groupId, itemCount: 0, sortOrder: 3 });
   });
 
+  it('returns system counts and playable counts', async () => {
+    const db = {
+      wallpaperGroup: { findMany: vi.fn().mockResolvedValue([{ id: groupId, name: '场景组', color: '#4f8cff', sortOrder: 0, updatedAt: new Date(), _count: { items: 3 } }]) },
+      wallpaperGroupItem: { groupBy: vi.fn().mockResolvedValue([{ groupId, _count: { _all: 2 } }]) },
+      wallpaper: { count: vi.fn().mockResolvedValueOnce(5).mockResolvedValueOnce(3) },
+    };
+    const result = await new GroupsController({ db } as any).list();
+    expect(result.system).toEqual({ all: 5, ungrouped: 3 });
+    expect(result.items[0]).toMatchObject({ itemCount: 3, playableCount: 2 });
+  });
+
   it('replaces wallpaper group assignments in one transaction', async () => {
     const wallpaperGroupItem = { deleteMany: vi.fn().mockResolvedValue({ count: 0 }), createMany: vi.fn().mockResolvedValue({ count: 1 }) };
     const db = {
