@@ -85,7 +85,7 @@ export function SearchPage() {
   const changeSort = (value: SearchSort) => { searchSession.sort = value; searchSession.page = 1; saveSearchSession(); setSort(value); setPage(1); };
   return <section aria-busy={loading}>
     <div className="page-heading"><div><p className="eyebrow">STEAM WORKSHOP</p><h1>发现下一张壁纸</h1><p>搜索官方创意工坊，将原始文件安全发布到共享壁纸库。</p></div></div>
-    <form className="search-bar" onSubmit={submit}><input value={input} onChange={(event) => { searchSession.input = event.target.value; saveSearchSession(); setInput(event.target.value); }} placeholder="搜索壁纸、场景或艺术家…" aria-label="搜索工坊"/><button className="search-submit" aria-label="搜索"><Icon name="search" size={19}/><span>搜索</span></button></form>
+    <form className="search-bar" data-glass-target="search" onSubmit={submit}><input value={input} onChange={(event) => { searchSession.input = event.target.value; saveSearchSession(); setInput(event.target.value); }} placeholder="搜索壁纸、场景或艺术家…" aria-label="搜索工坊"/><button className="search-submit" aria-label="搜索"><Icon name="search" size={19}/><span>搜索</span></button></form>
     <div className="filters"><MultiSelectFilter label="类型" options={typeOptions} selected={types} onChange={changeTypes}/><MultiSelectFilter label="内容分级" options={availableRatingOptions} selected={ratings} onChange={changeRatings}/><SortMenu options={sortOptions} value={sort} onChange={changeSort}/></div>
     {contentFilter && <p className="filter-notice">内容过滤已开启：不显示成人和未分级内容，可在 Steam 设置中关闭。</p>}
     {error && <div className="error-state">{error}<button className="text-button" onClick={refresh}>重试</button></div>}

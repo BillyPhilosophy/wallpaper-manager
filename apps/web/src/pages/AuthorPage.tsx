@@ -49,7 +49,7 @@ export function AuthorPage() {
   return <section aria-busy={loading}>
     <Link className="back-link" to="/">← 返回工坊搜索</Link>
     <div className="author-summary">
-      {data?.author.avatarUrl ? <img src={data.author.avatarUrl} alt="" className="author-avatar"/> : <span className="author-avatar-placeholder"><Icon name="monitor" size={28}/></span>}
+      {data?.author.avatarUrl ? <img src={data.author.avatarUrl} alt="" className="author-avatar" crossOrigin="anonymous"/> : <span className="author-avatar-placeholder"><Icon name="monitor" size={28}/></span>}
       <div><p className="eyebrow">WORKSHOP AUTHOR</p><h1>{data?.author.name || '壁纸作者'}</h1><p>查看该作者发布的 Wallpaper Engine 作品，共 {data?.total ?? '…'} 项。</p></div>
       {data?.author.profileUrl && <a className="button-link secondary author-steam-link" href={data.author.profileUrl} target="_blank" rel="noopener noreferrer">Steam 主页</a>}
     </div>

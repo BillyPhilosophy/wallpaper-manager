@@ -11,6 +11,7 @@ import { AuthorPage } from './pages/AuthorPage';
 import { GroupsPage } from './pages/GroupsPage';
 import { DynamicBackground } from './features/appearance/DynamicBackground';
 import { useAppearance } from './features/appearance/AppearanceContext';
+import { CanvasEffects } from './features/canvas-effects/CanvasEffects';
 import { Icon, type IconName } from './components/Icon';
 
 const navigation: { to: string; label: string; mobileLabel: string; icon: IconName; end?: boolean }[] = [
@@ -55,7 +56,7 @@ export default function App() {
         <NavLink className="mobile-settings" to="/settings" aria-label="Steam 设置"><Icon name="settings"/></NavLink>
       </header>
       <main>
-        <Routes><Route path="/" element={<SearchPage/>}/><Route path="/library" element={<LibraryPage/>}/><Route path="/favorites" element={<FavoritesPage/>}/><Route path="/subscriptions" element={<SubscriptionsPage/>}/><Route path="/downloads" element={<DownloadsPage/>}/><Route path="/settings" element={<SettingsPage/>}/><Route path="/wallpaper/:workshopId" element={<DetailPage/>}/><Route path="/author/:steamId" element={<AuthorPage/>}/><Route path="/groups" element={<GroupsPage/>}/></Routes>
+        <CanvasEffects><Routes><Route path="/" element={<SearchPage/>}/><Route path="/library" element={<LibraryPage/>}/><Route path="/favorites" element={<FavoritesPage/>}/><Route path="/subscriptions" element={<SubscriptionsPage/>}/><Route path="/downloads" element={<DownloadsPage/>}/><Route path="/settings" element={<SettingsPage/>}/><Route path="/wallpaper/:workshopId" element={<DetailPage/>}/><Route path="/author/:steamId" element={<AuthorPage/>}/><Route path="/groups" element={<GroupsPage/>}/></Routes></CanvasEffects>
       </main>
       <nav className="mobile-tab-bar" aria-label="移动端主导航">{navigation.filter((item) => ['/', '/library', '/favorites', '/subscriptions', '/downloads'].includes(item.to)).map((item) => <NavLink key={item.to} to={item.to} end={item.end} aria-label={item.label}><Icon name={item.icon} size={21}/><span>{item.mobileLabel}</span></NavLink>)}</nav>
     </div>

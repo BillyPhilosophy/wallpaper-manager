@@ -672,3 +672,75 @@ pre { max-height: 300px; overflow: auto; padding: 14px; border-radius: 10px; bac
 .card-group i { width: 7px; height: 7px; flex: none; border-radius: 50%; }
 .system-group-item small { margin-left: 7px; padding: 2px 5px; border-radius: 4px; background: var(--chip); color: var(--muted); font-size: 9px; font-weight: 400; }
 .rotation-status { color: var(--accent) !important; }
+
+/* Canvas UI stays in document flow, preserving native scrolling and hit testing. */
+.canvas-effect-stage { position: relative; min-width: 0; isolation: isolate; }
+.canvas-effect-source { position: absolute; inset: 0; width: 100%; height: 100%; }
+.canvas-effect-content { position: relative; width: 100%; min-width: 0; }
+.canvas-effect-output { position: absolute; inset: 0; z-index: 4; width: 100%; height: 100%; pointer-events: none; }
+.canvas-effect-blaze[data-capture=dom] .canvas-effect-output {
+  position: fixed;
+  inset: auto auto 0 var(--canvas-stage-left, 0px);
+  width: var(--canvas-stage-width, 100%);
+  height: min(38dvh, 380px);
+}
+main .canvas-effect-content > section { width: 100%; max-width: 1600px; margin: 0 auto; }
+
+.sidebar, .mobile-header, .mobile-tab-bar, .wallpaper-card, .settings-card, .detail-copy {
+  background-image: linear-gradient(145deg, rgba(255, 255, 255, .075), transparent 34%, rgba(80, 158, 255, .025));
+}
+.wallpaper-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(115deg, rgba(255, 255, 255, .12), transparent 24%, transparent 72%, rgba(70, 153, 255, .08));
+  opacity: .45;
+  pointer-events: none;
+  transition: opacity .25s ease;
+}
+.wallpaper-card:hover::before { opacity: .85; }
+.wallpaper-card > a, .wallpaper-card > .card-action { position: relative; }
+.wallpaper-card > .card-action { z-index: 2; }
+
+.canvas-effects-settings { padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: rgba(10, 132, 255, .035); }
+.canvas-effect-options { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.canvas-effect-option {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  min-height: 68px;
+  padding: 11px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--field);
+  color: var(--text);
+  text-align: left;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
+}
+.canvas-effect-option strong { font-size: 13px; font-weight: 600; }
+.canvas-effect-option small { color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.5; }
+.canvas-effect-option:hover { border-color: var(--border-strong); background: var(--hover); }
+.canvas-effect-option.is-selected { border-color: rgba(10, 132, 255, .65); background: var(--accent-soft); box-shadow: 0 0 0 2px rgba(10, 132, 255, .08), inset 0 1px 0 rgba(255, 255, 255, .12); }
+.canvas-effect-option.is-selected strong { color: #79bcff; }
+html[data-theme=light] .canvas-effect-option.is-selected strong { color: var(--accent-strong); }
+.liquid-trail-toggle { margin-top: 16px; }
+.liquid-trail-toggle small { margin-left: auto; color: var(--muted); font-size: 12px; }
+.effect-intensity-control { margin-top: 18px; }
+.canvas-effect-status { margin: 16px 0 0 !important; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--field); color: var(--muted) !important; font-size: 12px !important; line-height: 1.65 !important; }
+.canvas-effect-status.is-native { border-color: rgba(55, 199, 139, .18); color: #75d7ac !important; }
+.canvas-effect-note { margin: 8px 0 0 !important; color: var(--muted) !important; font-size: 12px !important; line-height: 1.65; }
+
+@media (max-width: 1180px) {
+  .canvas-effect-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+  .canvas-effects-settings { padding: 14px; }
+  .canvas-effect-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .liquid-trail-toggle { flex-wrap: wrap; }
+  .liquid-trail-toggle small { flex-basis: 100%; margin-left: 27px; }
+}
+@media (prefers-reduced-motion: reduce), (prefers-reduced-transparency: reduce) {
+  .canvas-effect-output { display: none; }
+  .wallpaper-card::before { transition: none; }
+}

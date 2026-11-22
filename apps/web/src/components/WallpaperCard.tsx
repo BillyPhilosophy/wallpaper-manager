@@ -6,7 +6,7 @@ import { FavoriteButton } from './FavoriteButton';
 import { WorkshopStats } from './WorkshopStats';
 
 export function WallpaperCard({ item, action, onFavoriteChange, showStats = false, groups = [] }: { item: WorkshopItem; action?: React.ReactNode; onFavoriteChange?: () => void; showStats?: boolean; groups?: { id: string; name: string; color: string }[] }) {
-  return <article className={`wallpaper-card${action ? ' has-action' : ''}${showStats ? ' has-stats' : ''}`}>
+  return <article className={`wallpaper-card${action ? ' has-action' : ''}${showStats ? ' has-stats' : ''}`} data-glass-target="card">
     <FavoriteButton item={item} variant="overlay" onChange={onFavoriteChange}/>
     <Link to={`/wallpaper/${item.workshopId}`}>
       <OfficialPreview url={item.officialPreviewUrl} title={item.title}/>

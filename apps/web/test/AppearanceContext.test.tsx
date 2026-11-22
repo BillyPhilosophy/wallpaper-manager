@@ -22,6 +22,9 @@ describe('AppearanceContext audio', () => {
     expect(JSON.parse(localStorage.getItem('wallpaper-appearance-v1') || '{}').autoQuality).toBe(true);
     expect(JSON.parse(localStorage.getItem('wallpaper-appearance-v1') || '{}').rotationEnabled).toBe(false);
     expect(JSON.parse(localStorage.getItem('wallpaper-appearance-v1') || '{}').rotationTrigger).toBe('interval');
+    expect(JSON.parse(localStorage.getItem('wallpaper-appearance-v1') || '{}').canvasEffect).toBe('glass');
+    expect(JSON.parse(localStorage.getItem('wallpaper-appearance-v1') || '{}').liquidTrail).toBe(true);
+    expect(JSON.parse(localStorage.getItem('wallpaper-appearance-v1') || '{}').effectIntensity).toBe(60);
     fireEvent.click(button);
     expect(button.textContent).toBe('false');
     expect(JSON.parse(localStorage.getItem('wallpaper-appearance-v1') || '{}').audioEnabled).toBe(false);

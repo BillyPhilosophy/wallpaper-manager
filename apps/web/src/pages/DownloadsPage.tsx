@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import type { Page, DownloadJob } from '@wallpaper-manager/contracts';
 import { api, post, statusLabel } from '../api';
@@ -73,13 +74,13 @@ export function DownloadsPage() {
     </article>)}</div>
     {!error && data && !data.items.length && <div className="empty-state">暂无下载任务。去工坊搜索一张喜欢的壁纸吧。</div>}
     <div className="pagination"><button className="secondary" disabled={!data || page <= 1} onClick={() => goToPage(page - 1)}>上一页</button><form className="page-jump" onSubmit={(event) => { event.preventDefault(); goToPage(Number(pageInput)); }}><input aria-label="页码" type="number" min="1" max={maxPage} value={pageInput} onChange={(event) => setPageInput(event.target.value)}/><button className="secondary" disabled={!data}>跳转</button></form><span>共 {maxPage} 页 · {data?.total || 0} 项</span><button className="secondary" disabled={!data || page >= maxPage} onClick={() => goToPage(page + 1)}>下一页</button></div>
-    {target && <div className="dialog-backdrop"><div className="dialog" role="dialog" aria-modal="true" aria-label="确认删除？">
+    {target && createPortal(<div className="dialog-backdrop"><div className="dialog" role="dialog" aria-modal="true" aria-label="确认删除？">
       <h2>确认删除？</h2><p>{'completed' in target ? '将处理所有已完成的下载记录。' : `将处理工坊 ${target.job.workshopId} 的这条下载记录。`}</p>
       <label className="content-filter-toggle"><input type="checkbox" checked={deleteSource} disabled={busy === 'delete'} onChange={(event) => setDeleteSource(event.target.checked)}/>同时删除本地源文件及所有关联记录</label>
       {deleteSource && <div className="deletion-sources">{previewLoading ? <p role="status">正在读取待删除文件…</p> : previewItems.length ? previewItems.map((item) => <div className="deletion-source" key={item.workshopId}><OfficialPreview url={item.officialPreviewUrl} title={item.title} className="deletion-thumbnail"/><div><strong>{item.title}</strong><small>ID {item.workshopId}</small></div></div>) : <p>没有可删除的本地源文件，仅删除记录。</p>}</div>}
       {deleteError && <p className="error-text" role="alert">{deleteError}</p>}
       <div className="dialog-actions"><button className="secondary" disabled={busy === 'delete'} onClick={() => setTarget(null)}>取消</button><button className="danger" disabled={busy === 'delete' || previewLoading} onClick={() => void confirmDelete()}>{deleteSource ? '删除文件和记录' : '仅删除记录'}</button></div>
-    </div></div>}
+    </div></div>, document.body)}
   </section>;
 }
 

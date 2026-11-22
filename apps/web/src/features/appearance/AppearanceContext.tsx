@@ -2,6 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 
 export type ThemePreference = 'dark' | 'light' | 'system';
 export type BackgroundMode = 'off' | 'static' | 'dynamic';
+export type CanvasEffectName = 'glass' | 'liquid' | 'shatter' | 'blaze';
+export type CanvasEffectPreference = 'off' | CanvasEffectName;
 
 export interface AppearanceSettings {
   theme: ThemePreference;
@@ -15,6 +17,9 @@ export interface AppearanceSettings {
   rotationIntervalMinutes: number;
   rotationOrder: 'sequence' | 'random';
   rotationTrigger: 'interval' | 'videoEnd';
+  canvasEffect: CanvasEffectPreference;
+  liquidTrail: boolean;
+  effectIntensity: number;
 }
 
 interface AppearanceValue {
@@ -24,7 +29,7 @@ interface AppearanceValue {
 }
 
 const storageKey = 'wallpaper-appearance-v1';
-const defaults: AppearanceSettings = { theme: 'dark', backgroundMode: 'off', backgroundId: null, dimming: 45, audioEnabled: true, autoQuality: true, rotationEnabled: false, rotationGroupId: null, rotationIntervalMinutes: 5, rotationOrder: 'sequence', rotationTrigger: 'interval' };
+const defaults: AppearanceSettings = { theme: 'dark', backgroundMode: 'off', backgroundId: null, dimming: 45, audioEnabled: true, autoQuality: true, rotationEnabled: false, rotationGroupId: null, rotationIntervalMinutes: 5, rotationOrder: 'sequence', rotationTrigger: 'interval', canvasEffect: 'glass', liquidTrail: true, effectIntensity: 60 };
 const AppearanceContext = createContext<AppearanceValue | null>(null);
 
 function readSettings(): AppearanceSettings {
@@ -42,6 +47,9 @@ function readSettings(): AppearanceSettings {
       rotationIntervalMinutes: typeof value.rotationIntervalMinutes === 'number' && [1, 5, 15, 30, 60].includes(value.rotationIntervalMinutes) ? value.rotationIntervalMinutes : defaults.rotationIntervalMinutes,
       rotationOrder: value.rotationOrder === 'random' ? 'random' : defaults.rotationOrder,
       rotationTrigger: value.rotationTrigger === 'videoEnd' ? 'videoEnd' : defaults.rotationTrigger,
+      canvasEffect: ['off', 'glass', 'liquid', 'shatter', 'blaze'].includes(value.canvasEffect || '') ? value.canvasEffect as CanvasEffectPreference : defaults.canvasEffect,
+      liquidTrail: typeof value.liquidTrail === 'boolean' ? value.liquidTrail : defaults.liquidTrail,
+      effectIntensity: typeof value.effectIntensity === 'number' ? Math.max(20, Math.min(100, value.effectIntensity)) : defaults.effectIntensity,
     };
   } catch {
     return defaults;
