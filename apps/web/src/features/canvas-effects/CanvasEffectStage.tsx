@@ -1,8 +1,4 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { createBlaze } from '../../components/canvasui/Blaze';
-import { createGlass } from '../../components/canvasui/Glass';
-import { createLiquid } from '../../components/canvasui/Liquid';
-import { createShatter } from '../../components/canvasui/Shatter';
 import { supportsHtmlCapture, supportsWebgl } from './capability';
 import type { CanvasEffectName } from '../appearance/AppearanceContext';
 
@@ -20,11 +16,11 @@ interface EffectInstance {
 
 type EffectFactory = (elements: EffectElements, options: Record<string, unknown>) => EffectInstance | null;
 
-const factories: Record<CanvasEffectName, EffectFactory> = {
-  glass: createGlass as unknown as EffectFactory,
-  liquid: createLiquid as unknown as EffectFactory,
-  shatter: createShatter as unknown as EffectFactory,
-  blaze: createBlaze as unknown as EffectFactory,
+const loaders: Record<CanvasEffectName, () => Promise<EffectFactory>> = {
+  glass: () => import('../../components/canvasui/Glass').then((module) => module.createGlass as unknown as EffectFactory),
+  liquid: () => import('../../components/canvasui/Liquid').then((module) => module.createLiquid as unknown as EffectFactory),
+  shatter: () => import('../../components/canvasui/Shatter').then((module) => module.createShatter as unknown as EffectFactory),
+  blaze: () => import('../../components/canvasui/Blaze').then((module) => module.createBlaze as unknown as EffectFactory),
 };
 
 function effectOptions(effect: CanvasEffectName, intensity: number, capture: boolean): Record<string, unknown> {
@@ -73,16 +69,19 @@ export function CanvasEffectStage({ effect, intensity, capture = true, children 
   const contentRef = useRef<HTMLDivElement>(null);
   const outputRef = useRef<HTMLCanvasElement>(null);
   const instanceRef = useRef<EffectInstance | null>(null);
+  const optionsRef = useRef<Record<string, unknown>>({});
   const [failed, setFailed] = useState(false);
   const [contentHeight, setContentHeight] = useState(0);
   const [webgl] = useState(supportsWebgl);
   const [htmlInCanvas] = useState(() => capture && supportsHtmlCapture());
   const native = webgl && htmlInCanvas && !failed;
+  optionsRef.current = effectOptions(effect, intensity, native);
 
   useLayoutEffect(() => {
     const content = contentRef.current;
     const stage = outputRef.current?.parentElement;
     if (!content || !stage) return;
+    let frame = 0;
     const measure = () => {
       const bounds = stage.getBoundingClientRect();
       stage.style.setProperty('--canvas-stage-left', `${bounds.left}px`);
@@ -94,17 +93,25 @@ export function CanvasEffectStage({ effect, intensity, capture = true, children 
       const next = Math.ceil(content.getBoundingClientRect().height);
       setContentHeight((current) => Math.abs(current - next) > 1 ? next : current);
     };
+    const scheduleMeasure = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        measure();
+      });
+    };
     measure();
-    const resize = new ResizeObserver(measure);
-    const mutations = native ? new MutationObserver(measure) : null;
+    const resize = new ResizeObserver(scheduleMeasure);
+    const mutations = native ? new MutationObserver(scheduleMeasure) : null;
     resize.observe(stage);
     resize.observe(content);
     mutations?.observe(content, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
-    window.addEventListener('resize', measure, { passive: true });
+    window.addEventListener('resize', scheduleMeasure, { passive: true });
     return () => {
+      cancelAnimationFrame(frame);
       resize.disconnect();
       mutations?.disconnect();
-      window.removeEventListener('resize', measure);
+      window.removeEventListener('resize', scheduleMeasure);
     };
   }, [native]);
 
@@ -113,17 +120,30 @@ export function CanvasEffectStage({ effect, intensity, capture = true, children 
     const content = contentRef.current;
     const output = outputRef.current;
     if (!webgl || !source || !content || !output) return;
-    instanceRef.current = factories[effect]({ source, content, output }, effectOptions(effect, intensity, native));
-    if (native && !instanceRef.current) setFailed(true);
+    let cancelled = false;
+    void loaders[effect]().then((factory) => {
+      if (cancelled) return;
+      const instance = factory({ source, content, output }, optionsRef.current);
+      if (cancelled) {
+        instance?.destroy();
+        return;
+      }
+      instanceRef.current = instance;
+      instance?.resize();
+      if (native && !instance) setFailed(true);
+    }).catch(() => {
+      if (!cancelled && native) setFailed(true);
+    });
     return () => {
+      cancelled = true;
       instanceRef.current?.destroy();
       instanceRef.current = null;
     };
   }, [effect, native, webgl]);
 
   useEffect(() => {
-    instanceRef.current?.setOptions(effectOptions(effect, intensity, native));
-  });
+    instanceRef.current?.setOptions(optionsRef.current);
+  }, [effect, intensity, native]);
   useEffect(() => { instanceRef.current?.resize(); }, [contentHeight]);
 
   const stageStyle: CSSProperties | undefined = native && contentHeight > 0 ? { height: contentHeight } : undefined;

@@ -29,8 +29,14 @@ test('main effects are exclusive, settings persist, and off disables every canva
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/settings');
+  await expect(page.getByRole('button', { name: /关闭 仅保留磨玻璃/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-canvas-effect]')).toHaveCount(0);
+
+  await page.getByRole('button', { name: /Glass 折射玻璃透镜/ }).click();
   await expect(page.getByRole('button', { name: /Glass 折射玻璃透镜/ })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('[data-canvas-effect="glass"]')).toHaveCount(1);
+  await expect(page.locator('[data-canvas-effect]')).toHaveCount(1);
+  await page.getByRole('switch', { name: /叠加液态流光/ }).check();
   await expect(page.locator('[data-canvas-effect="liquid"]')).toHaveCount(1);
 
   await page.getByRole('button', { name: /Liquid 流体波纹扭曲/ }).click();

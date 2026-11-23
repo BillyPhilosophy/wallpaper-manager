@@ -29,7 +29,7 @@ interface AppearanceValue {
 }
 
 const storageKey = 'wallpaper-appearance-v1';
-const defaults: AppearanceSettings = { theme: 'dark', backgroundMode: 'off', backgroundId: null, dimming: 45, audioEnabled: true, autoQuality: true, rotationEnabled: false, rotationGroupId: null, rotationIntervalMinutes: 5, rotationOrder: 'sequence', rotationTrigger: 'interval', canvasEffect: 'glass', liquidTrail: true, effectIntensity: 60 };
+const defaults: AppearanceSettings = { theme: 'dark', backgroundMode: 'off', backgroundId: null, dimming: 45, audioEnabled: true, autoQuality: true, rotationEnabled: false, rotationGroupId: null, rotationIntervalMinutes: 5, rotationOrder: 'sequence', rotationTrigger: 'interval', canvasEffect: 'off', liquidTrail: false, effectIntensity: 60 };
 const AppearanceContext = createContext<AppearanceValue | null>(null);
 
 function readSettings(): AppearanceSettings {
