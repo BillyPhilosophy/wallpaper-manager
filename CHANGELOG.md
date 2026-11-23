@@ -2,6 +2,33 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 的记录方式，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)，发布记录由 release-please 根据 Conventional Commits 自动维护。
 
+## [1.3.0](https://github.com/BillyPhilosophy/wallpaper-manager/compare/v1.2.0...v1.3.0) (2026-11-23)
+
+
+### 新增
+
+* **web:** 优化背景欣赏与全屏预览体验 ([ec088c0](https://github.com/BillyPhilosophy/wallpaper-manager/commit/ec088c0e50ea2504e595365927c8b32a5c0cb5c4))
+* **web:** 增加可靠的浏览器壁纸资源缓存 ([640e7e2](https://github.com/BillyPhilosophy/wallpaper-manager/commit/640e7e24b60fee8ed9004f5be371d376a7a4cf11))
+* **web:** 添加 Canvas UI 视觉效果与外观设置 ([3a67ba4](https://github.com/BillyPhilosophy/wallpaper-manager/commit/3a67ba4b4f06e40834674886a6e1f1418f20c11f))
+* **web:** 添加仅用于实时预览的视频离线缓存 ([fcb1601](https://github.com/BillyPhilosophy/wallpaper-manager/commit/fcb16017b9b65f8b7af7a72cf940f179972c63c0))
+* **web:** 添加分组轮播与视频结束切换 ([f3faeb8](https://github.com/BillyPhilosophy/wallpaper-manager/commit/f3faeb8a7b3d7bf64d5b0386999067e70b5bab83))
+* **web:** 添加画质控制并暂停浏览器缓存 ([43f23b2](https://github.com/BillyPhilosophy/wallpaper-manager/commit/43f23b2141b71d43922d0b7872dfbd9296b76159))
+* **worker:** 优化下载流程，添加断点续传，超时重试不再重新下载 ([bbd4d32](https://github.com/BillyPhilosophy/wallpaper-manager/commit/bbd4d3260629482a37e0a5f8fa1d49cefc0aba4e))
+* 优化分组轮播与壁纸库交互 ([61773db](https://github.com/BillyPhilosophy/wallpaper-manager/commit/61773db2b3dbf1abc80caf9fb687bd83e29a34e3))
+* 完善分组管理并修复作者作品查询 ([4c7b15f](https://github.com/BillyPhilosophy/wallpaper-manager/commit/4c7b15f72c2b264d695693c43e9e952bc461f1f9))
+* 添加作者作品页与壁纸软分组 ([0b39df2](https://github.com/BillyPhilosophy/wallpaper-manager/commit/0b39df20a882dbf1bcdfade5e52a6e0e15aff849))
+
+
+### 修复
+
+* **web:** 修复预览快捷键与控制条焦点异常 ([690f16e](https://github.com/BillyPhilosophy/wallpaper-manager/commit/690f16e71c0897b8363f4bfcffaed8e4e449f580))
+
+
+### 性能优化
+
+* **web:** Canvas UI 默认关闭并按效果动态加载 ([aba8618](https://github.com/BillyPhilosophy/wallpaper-manager/commit/aba8618bbbf32e65d27b1a062979fc0750f77869))
+* 优化视频原生缓存与当前背景预加载 ([b77b2d9](https://github.com/BillyPhilosophy/wallpaper-manager/commit/b77b2d962820d470f055f630b086a9865fca7669))
+
 ## [1.2.0](https://github.com/BillyPhilosophy/wallpaper-manager/compare/v1.1.1...v1.2.0) (2026-11-13)
 
 
