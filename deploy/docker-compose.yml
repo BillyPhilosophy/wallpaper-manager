@@ -24,7 +24,7 @@ services:
     image: ${DOCKERHUB_USERNAME:-local}/wallpaper-manager-web:${IMAGE_TAG:-latest}
     build: { context: .., dockerfile: deploy/web.Dockerfile }
     depends_on: { api: { condition: service_healthy } }
-    ports: ["8083:80"]
+    ports: ["${WEB_BIND_ADDRESS:-127.0.0.1}:8083:80"]
     restart: unless-stopped
   api:
     image: ${DOCKERHUB_USERNAME:-local}/wallpaper-manager-api:${IMAGE_TAG:-latest}
@@ -35,6 +35,9 @@ services:
       REDIS_URL: redis://redis:6379
       STEAM_ROOT: /wallpaper-manager/steam-data
       STEAM_WEB_API_KEY: ${STEAM_WEB_API_KEY:-}
+      AUTH_TOTP_SECRET: ${AUTH_TOTP_SECRET:-}
+      AUTH_SESSION_SECRET: ${AUTH_SESSION_SECRET:-}
+      AUTH_SESSION_TTL_SECONDS: ${AUTH_SESSION_TTL_SECONDS:-43200}
       MAX_QUEUE_LENGTH: ${MAX_QUEUE_LENGTH:-20}
       HTTP_PROXY: ${HTTP_PROXY:-}
       HTTPS_PROXY: ${HTTPS_PROXY:-}

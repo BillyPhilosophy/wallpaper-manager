@@ -7,5 +7,7 @@ import { FavoritesController } from './favorites/favorites.controller';
 import { SteamController } from './steam/steam.controller';
 import { SystemController } from './system/system.controller';
 import { GroupsController } from './groups/groups.controller';
-@Module({ imports: [InfrastructureModule], controllers: [WallpapersController, WorkshopController, FavoritesController, SteamController, SystemController, GroupsController], providers: [{ provide: APP_FILTER, useClass: ApiExceptionFilter }] })
+import { AuthController } from './auth/auth.controller';
+import { AuthService } from './auth/auth.service';
+@Module({ imports: [InfrastructureModule], controllers: [WallpapersController, WorkshopController, FavoritesController, SteamController, SystemController, GroupsController, AuthController], providers: [AuthService, { provide: APP_FILTER, useClass: ApiExceptionFilter }] })
 export class AppModule {}

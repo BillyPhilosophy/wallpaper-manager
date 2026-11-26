@@ -2,7 +2,7 @@
 
 ## 前置条件
 
-面向 ARM64 Linux 设备，树莓派是主要参考部署环境。需要 Docker Engine 与 Compose v2。Node.js 仅开发时需要 `>=22.12.0`。不要把 `8083` 直接暴露到公网；MVP 仅用于可信局域网单用户环境。
+面向 ARM64 Linux 设备，树莓派是主要参考部署环境。需要 Docker Engine 与 Compose v2。Node.js 仅开发时需要 `>=22.12.0`。Web 默认只绑定宿主机回环地址 `127.0.0.1:8083`，不要把 `8083` 直接暴露到公网；公网访问应通过启用 HTTPS 的反向代理，并配置下文的 Authenticator 前置鉴权。
 
 从项目根目录复制并编辑环境配置：
 
@@ -15,6 +15,10 @@ cp deploy/.env.example deploy/.env
 ```env
 DOCKERHUB_USERNAME=local
 IMAGE_TAG=latest
+AUTH_TOTP_SECRET=
+AUTH_SESSION_SECRET=
+AUTH_SESSION_TTL_SECONDS=43200
+WEB_BIND_ADDRESS=127.0.0.1
 WALLPAPER_DATA_ROOT=/srv/wallpaper-manager
 # STEAM_DATA_ROOT=/mnt/data/data/steam-data
 STEAM_WEB_API_KEY=
@@ -42,6 +46,62 @@ Compose 的一次性 `init` 服务会自动创建 `app-data`、`staging`、`stea
 如果 `STEAM_DATA_ROOT` 位于外接硬盘，启动前必须用 `findmnt` 确认预期分区已挂载，并检查目标目录存在。仅对空挂载点执行 `ls` 不足以证明硬盘已挂载；否则 Docker 可能在系统盘创建同名目录并继续写入。
 
 如需通过宿主机代理访问 Steam，设置 `STEAM_PROXY_URL`（也可使用 `HTTP_PROXY`/`HTTPS_PROXY`），例如 `http://host.docker.internal:7890`。Compose 会把该主机名映射到 Docker 宿主机网关，代理服务应监听 `0.0.0.0` 并允许容器网段访问。`STEAM_NETWORK_MODE` 支持 `direct`、`proxy`、`auto`：配置代理时默认 `proxy`，未配置时默认 `direct`。`auto` 先进行 5 秒直连探测，成功保持 15 分钟，只在网络错误时切代理，HTTP 状态和认证错误不会触发切换。保留 `NO_PROXY` 中的内部服务名，避免内部请求进入代理。修改后重建 API 和 Worker 容器。
+
+## Authenticator 前置鉴权
+
+网站支持基于 RFC 6238 TOTP 的 Authenticator 登录，可替代宿主机 OpenResty 的 Basic Auth。Google Authenticator、1Password、Microsoft Authenticator 等兼容 TOTP 的应用均可使用。两个密钥同时留空时保持旧版无鉴权行为；公网部署必须完成以下配置。
+
+### 首次绑定
+
+以下命令均在项目根目录执行。先从 Docker Hub 拉取包含此功能的新镜像，再运行一次性绑定工具：
+
+```bash
+docker compose -f deploy/docker-compose.yml pull api web
+docker compose -f deploy/docker-compose.yml run --rm --no-deps api node apps/api/dist/auth/setup.js
+```
+
+命令会在终端显示二维码和两行配置。用 Authenticator 扫码，将两行配置写入 `deploy/.env`：
+
+```env
+AUTH_TOTP_SECRET=绑定工具生成的Base32密钥
+AUTH_SESSION_SECRET=绑定工具生成的随机会话密钥
+AUTH_SESSION_TTL_SECONDS=43200
+```
+
+重新生成配置会替换 Authenticator 中的密钥，同时使所有已有网站会话失效。旧手机里的条目不会自动更新，应手动删除后重新扫码。二维码和 `AUTH_TOTP_SECRET` 都能用于生成登录验证码，必须按敏感信息保管，不要提交 Git、发到聊天工具或写入服务日志；建议离线备份恢复密钥。
+
+### 启动与 OpenResty
+
+写入配置后启动或重建服务：
+
+```bash
+docker compose -f deploy/docker-compose.yml up -d
+docker compose -f deploy/docker-compose.yml ps
+```
+
+浏览器打开 `https://paper.twilightknight.space`，应自动跳到 `/login`。输入当前 6 位验证码后进入原网站；在“设置 → 网站访问”中可主动退出。默认会话有效期为 12 小时，可通过 `AUTH_SESSION_TTL_SECONDS` 调整。
+
+确认新登录可用后，在宿主机 OpenResty 的网站配置中删除 `auth_basic` 和 `auth_basic_user_file`，继续反向代理到 `127.0.0.1:8083`，然后重新加载 OpenResty。不要在测试新鉴权前关闭旧认证。Web 容器默认仅绑定 `127.0.0.1:8083`，防止外部直接访问容器绕过认证。使用 host 网络的 OpenResty（包括部分 1Panel 安装方式）可直接代理到 `http://127.0.0.1:8083`；若 OpenResty 运行在其他主机或独立容器网络中，应通过受保护的内部网络连接，不要把 `WEB_BIND_ADDRESS` 改为 `0.0.0.0` 后直接暴露公网。
+
+### 验证与故障恢复
+
+启用鉴权后，以下命令应分别返回 `302`、`401`、`200`、`200`：
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8083/
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8083/api/health
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8083/login
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8083/healthz
+```
+
+注意事项：
+
+- 登录 Cookie 带有 `Secure`，公网入口必须使用有效 HTTPS；纯 HTTP 入口不会保存登录 Cookie。
+- 服务器和 Authenticator 手机的时间必须准确，建议启用 NTP 自动校时。服务端允许前后各一个 30 秒时间窗口。
+- 同一验证码只能成功登录一次；连续失败 5 次后锁定 15 分钟。验证码过期时等待新验证码再试。
+- `AUTH_SESSION_SECRET` 用于签名会话，修改后所有设备需要重新登录；两个密钥必须同时设置或同时留空。
+- 无法扫码或丢失手机时，只能在宿主机重新运行绑定命令并更新 `.env`，然后重建 API 和 Web。应急时可暂时将两个密钥同时清空并执行 `up -d`，但这会关闭网站鉴权，公网环境不应以此作为常规恢复方式。
+- 此机制是网站单用户访问门禁，不是多用户账号系统，也不替代 Steam 自身登录。
 
 ## 配置与启动
 
@@ -87,8 +147,7 @@ SQLite 在线备份可使用 SQLite backup API；不要在一个进程写库时�
 ## 验证
 
 ```bash
-curl http://树莓派IP:8083/api/health
-curl http://树莓派IP:8083/api/system/capabilities
+curl http://127.0.0.1:8083/healthz
 ./scripts/check-webwallgl.sh
 ```
 

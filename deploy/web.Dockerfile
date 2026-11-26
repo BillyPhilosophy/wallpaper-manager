@@ -9,4 +9,4 @@ RUN pnpm install --frozen-lockfile && pnpm --filter @wallpaper-manager/contracts
 FROM nginx:1.27-alpine
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
-HEALTHCHECK CMD wget -qO- http://127.0.0.1/ >/dev/null || exit 1
+HEALTHCHECK CMD wget -qO- http://127.0.0.1/healthz >/dev/null || exit 1
