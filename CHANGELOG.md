@@ -2,6 +2,18 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 的记录方式，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)，发布记录由 release-please 根据 Conventional Commits 自动维护。
 
+## [1.4.0](https://github.com/BillyPhilosophy/wallpaper-manager/compare/v1.3.0...v1.4.0) (2026-11-26)
+
+
+### 新增
+
+* **auth:** 添加 Authenticator 前置鉴权 ([6ff159c](https://github.com/BillyPhilosophy/wallpaper-manager/commit/6ff159cb669369f5834b97f15c49978684390382))
+
+
+### 修复
+
+* **auth:** 允许空密钥表示未启用鉴权 ([aa6c0f0](https://github.com/BillyPhilosophy/wallpaper-manager/commit/aa6c0f07feccacf00588adbd5e01f2c81d69b238))
+
 ## [1.3.0](https://github.com/BillyPhilosophy/wallpaper-manager/compare/v1.2.0...v1.3.0) (2026-11-23)
 
 
