@@ -14,8 +14,8 @@ export const apiEnvSchema = z.object({
   STEAM_AUTH_SOCKET: z.string().default('/tmp/wallpaper-manager-steam-auth.sock'),
   MAX_QUEUE_LENGTH: z.coerce.number().int().positive().default(20),
   REQUEST_BODY_LIMIT: z.string().default('16kb'),
-  AUTH_TOTP_SECRET: z.string().regex(/^[A-Z2-7]+=*$/).min(16).optional(),
-  AUTH_SESSION_SECRET: z.string().min(32).optional(),
+  AUTH_TOTP_SECRET: z.preprocess((value) => value === '' ? undefined : value, z.string().regex(/^[A-Z2-7]+=*$/).min(16).optional()),
+  AUTH_SESSION_SECRET: z.preprocess((value) => value === '' ? undefined : value, z.string().min(32).optional()),
   AUTH_SESSION_TTL_SECONDS: z.coerce.number().int().min(300).max(604800).default(43200),
 });
 export const workerEnvSchema = z.object({
